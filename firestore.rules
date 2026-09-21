@@ -1,0 +1,28 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function esAsesora() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/roles/$(request.auth.uid))
+        && get(/databases/$(database)/documents/roles/$(request.auth.uid)).data.rol == "asesora";
+    }
+
+    // Cada usuario puede leer su propio rol (para que la app sepa si es asesora o cliente).
+    // Nadie puede escribir acá desde la app — el rol se asigna a mano, desde la consola de Firebase.
+    match /roles/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    // Cada cliente entra solo a su propia carpeta (negocios/{su propio uid}) y a todo lo de adentro.
+    // La asesora entra a la de cualquier cliente.
+    match /negocios/{clienteId} {
+      allow read, write: if request.auth != null && (request.auth.uid == clienteId || esAsesora());
+
+      match /{coleccion}/{docId} {
+        allow read, write: if request.auth != null && (request.auth.uid == clienteId || esAsesora());
+      }
+    }
+  }
+}
