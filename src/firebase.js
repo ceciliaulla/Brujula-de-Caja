@@ -4,7 +4,7 @@
 // no esta configuración.
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { initializeFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBcxBIFUR95vm3xOtgy1Be8-RQPyslfvcA",
@@ -17,4 +17,8 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+// ignoreUndefinedProperties: campos como "clienteId" quedan en undefined cuando una venta
+// no tiene cliente asociado (una venta de mostrador común). Esta opción hace que Firestore
+// simplemente no guarde esos campos, en vez de rechazar todo el guardado — el mismo
+// comportamiento que tenía el prototipo con window.storage.
+export const db = initializeFirestore(app, { ignoreUndefinedProperties: true });
