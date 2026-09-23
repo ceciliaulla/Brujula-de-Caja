@@ -122,7 +122,7 @@ function CargandoNegocio({ clienteId, esAsesora, onCambiarCliente, onCerrarSesio
     </div>
   );
 
-  return <Negocio data={data} update={update} cabecera={cabecera} />;
+  return <Negocio data={data} update={update} cabecera={cabecera} esAsesora={esAsesora} />;
 }
 
 export default function AppRoot() {

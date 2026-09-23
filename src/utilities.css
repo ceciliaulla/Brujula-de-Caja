@@ -1,0 +1,28 @@
+/* Este archivo no existía en el proyecto real: el código usa clases como "flex", "gap-3",
+   "items-end", etc. (viene de cuando la app corría dentro de un Artifact de Claude, que trae
+   Tailwind ya cargado). Al pasar a un proyecto Vite/React de verdad, esas clases quedaron sin
+   ningún CSS que las defina, así que no hacían nada — esa es la causa de que los campos y las
+   tarjetas de Indicadores se vieran "corridos" o como una barra de punta a punta.
+   Este archivo define solo las clases que el código realmente usa, nada más. */
+
+.flex { display: flex; }
+.flex-col { flex-direction: column; }
+.flex-wrap { flex-wrap: wrap; }
+.items-center { align-items: center; }
+.items-end { align-items: flex-end; }
+.justify-between { justify-content: space-between; }
+.grid { display: grid; }
+.text-sm { font-size: 0.875rem; }
+
+.gap-1 { gap: 4px; }
+.gap-2 { gap: 8px; }
+.gap-3 { gap: 12px; }
+.gap-4 { gap: 16px; }
+.gap-5 { gap: 20px; }
+
+/* Los <input>, <select>, <button>, <textarea> no heredan la tipografía del resto de la página
+   por defecto en ningún navegador — por eso los campos a completar se veían con una letra
+   distinta a la del resto de la app. Esto los iguala a la fuente del contenedor (Quicksand). */
+button, input, select, textarea {
+  font-family: inherit;
+}
