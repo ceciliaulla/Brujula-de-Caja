@@ -8,7 +8,7 @@ import {
   Plus, Trash2, Upload, Package, ShoppingCart, Receipt,
   BarChart3, Settings, X, Check, AlertTriangle, PackagePlus, Pencil,
   Download, Wallet, ArrowLeftRight, HelpCircle, MessageSquarePlus,
-  ChevronDown, ChevronRight, Users,
+  ChevronDown, ChevronRight, Users, Menu,
 } from "lucide-react";
 
 const C = {
@@ -429,7 +429,7 @@ function deltaInfo(pctValue, invertirColor) {
 }
 
 /* ---------- Sidebar ---------- */
-function Sidebar({ tab, setTab, nombreNegocio }) {
+function Sidebar({ tab, setTab, nombreNegocio, open, onClose }) {
   const items = [
     { id: "dashboard", label: "Indicadores", icon: BarChart3 },
     { id: "ventas", label: "Ventas", icon: ShoppingCart },
@@ -443,6 +443,7 @@ function Sidebar({ tab, setTab, nombreNegocio }) {
   ];
   return (
     <div
+      className={"sidebar" + (open ? " sidebar-open" : "")}
       style={{
         width: 210,
         flexShrink: 0,
@@ -453,8 +454,12 @@ function Sidebar({ tab, setTab, nombreNegocio }) {
         flexDirection: "column",
         gap: 4,
         minHeight: "100%",
+        position: "relative",
       }}
     >
+      <button className="sidebar-close-btn" onClick={onClose} aria-label="Cerrar menú">
+        <X size={18} />
+      </button>
       <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 22, paddingLeft: 8, letterSpacing: 0.4 }}>
         {nombreNegocio || "Mi Negocio"}
       </div>
@@ -1163,7 +1168,7 @@ function VentasView({ data, update, esAsesora }) {
 
         {carrito.length > 0 && (
           <div style={{ marginTop: 16 }}>
-            <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
+            <table className="tbl-responsive" style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
               <thead>
                 <tr style={{ color: C.inkSoft, textAlign: "left" }}>
                   <th style={{ padding: "6px 8px" }}>Producto</th>
@@ -1177,15 +1182,15 @@ function VentasView({ data, update, esAsesora }) {
               <tbody>
                 {carrito.map((it) => (
                   <tr key={it.tempId} style={{ borderTop: `1px solid ${C.line}` }}>
-                    <td style={{ padding: "6px 8px" }}>
+                    <td data-label="Producto" style={{ padding: "6px 8px" }}>
                       {it.productoNombre}
                       {it.esCombo && <span style={{ marginLeft: 6, fontSize: 11, color: C.gold, fontWeight: 600 }}>· Combo</span>}
                     </td>
-                    <td style={{ padding: "6px 8px" }}>{it.cantidad}</td>
-                    <td style={{ padding: "6px 8px" }}>{it.esCombo ? "—" : it.listaLabel}</td>
-                    <td style={{ padding: "6px 8px", textAlign: "right" }}>{money(it.precioUnitario)}</td>
-                    <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: 600 }}>{money(it.subtotal)}</td>
-                    <td style={{ padding: "6px 8px" }}>
+                    <td data-label="Cant." style={{ padding: "6px 8px" }}>{it.cantidad}</td>
+                    <td data-label="Lista" style={{ padding: "6px 8px" }}>{it.esCombo ? "—" : it.listaLabel}</td>
+                    <td data-label="P. Unit." style={{ padding: "6px 8px", textAlign: "right" }}>{money(it.precioUnitario)}</td>
+                    <td data-label="Subtotal" style={{ padding: "6px 8px", textAlign: "right", fontWeight: 600 }}>{money(it.subtotal)}</td>
+                    <td data-label="" style={{ padding: "6px 8px" }}>
                       <Trash2 size={14} style={{ cursor: "pointer", color: C.inkFaint }} onClick={() => quitarItem(it.tempId)} />
                     </td>
                   </tr>
@@ -1298,7 +1303,7 @@ function VentasView({ data, update, esAsesora }) {
 
       {verHistorico && (
         <Card style={{ padding: 0, overflow: "hidden" }}>
-          <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
+          <table className="tbl-responsive" style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ background: C.bg, textAlign: "left", color: C.inkSoft }}>
                 {["Fecha", "Producto", "Cant.", "Lista", "Bruto", "Desc.", "Total", "Punto de venta", "Medio", "Cobro", "Cliente", "Obs.", ""].map((h) => (
@@ -1309,21 +1314,21 @@ function VentasView({ data, update, esAsesora }) {
             <tbody>
               {[...data.ventas].sort((a, b) => (a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : 0)).map((v) => (
                 <tr key={v.id} style={{ borderTop: `1px solid ${C.line}` }}>
-                  <td style={{ padding: "8px 12px" }}>{v.fecha}</td>
-                  <td style={{ padding: "8px 12px" }}>
+                  <td data-label="Fecha" style={{ padding: "8px 12px" }}>{v.fecha}</td>
+                  <td data-label="Producto" style={{ padding: "8px 12px" }}>
                     {v.productoNombre}
                     {v.comboNombre && (
                       <div style={{ fontSize: 11, color: C.inkFaint }}>parte del combo "{v.comboNombre}"</div>
                     )}
                   </td>
-                  <td style={{ padding: "8px 12px" }}>{v.cantidad}</td>
-                  <td style={{ padding: "8px 12px" }}>{v.listaLabel || v.lista}</td>
-                  <td style={{ padding: "8px 12px" }}>{money(v.totalBruto ?? v.total)}</td>
-                  <td style={{ padding: "8px 12px", color: C.rust }}>{v.descuentoMonto ? `-${money(v.descuentoMonto)}` : "—"}</td>
-                  <td style={{ padding: "8px 12px", fontWeight: 600 }}>{money(v.total)}</td>
-                  <td style={{ padding: "8px 12px" }}>{v.puntoVenta}</td>
-                  <td style={{ padding: "8px 12px" }}>{v.medioPago}</td>
-                  <td style={{ padding: "8px 12px" }}>
+                  <td data-label="Cant." style={{ padding: "8px 12px" }}>{v.cantidad}</td>
+                  <td data-label="Lista" style={{ padding: "8px 12px" }}>{v.listaLabel || v.lista}</td>
+                  <td data-label="Bruto" style={{ padding: "8px 12px" }}>{money(v.totalBruto ?? v.total)}</td>
+                  <td data-label="Desc." style={{ padding: "8px 12px", color: C.rust }}>{v.descuentoMonto ? `-${money(v.descuentoMonto)}` : "—"}</td>
+                  <td data-label="Total" style={{ padding: "8px 12px", fontWeight: 600 }}>{money(v.total)}</td>
+                  <td data-label="Punto de venta" style={{ padding: "8px 12px" }}>{v.puntoVenta}</td>
+                  <td data-label="Medio" style={{ padding: "8px 12px" }}>{v.medioPago}</td>
+                  <td data-label="Cobro" style={{ padding: "8px 12px" }}>
                     {v.medioPago === MEDIO_CTA_CTE ? (
                       <span style={{ color: C.inkFaint }}>Cta. Cte.</span>
                     ) : v.estadoCobro === "pendiente" && !v.confirmado ? (
@@ -1336,9 +1341,9 @@ function VentasView({ data, update, esAsesora }) {
                       </span>
                     )}
                   </td>
-                  <td style={{ padding: "8px 12px" }}>{v.clienteNombre || "—"}</td>
-                  <td style={{ padding: "8px 12px", color: C.inkSoft, maxWidth: 160 }}>{v.observaciones}</td>
-                  <td style={{ padding: "8px 12px" }}>
+                  <td data-label="Cliente" style={{ padding: "8px 12px" }}>{v.clienteNombre || "—"}</td>
+                  <td data-label="Obs." style={{ padding: "8px 12px", color: C.inkSoft, maxWidth: 160 }}>{v.observaciones}</td>
+                  <td data-label="" style={{ padding: "8px 12px" }}>
                     <Trash2
                       size={15}
                       style={{ cursor: "pointer", color: C.inkFaint }}
@@ -1453,7 +1458,7 @@ function GastosView({ data, update, esAsesora }) {
 
       {verHistorico && (
         <Card style={{ padding: 0, overflow: "hidden" }}>
-          <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
+          <table className="tbl-responsive" style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ background: C.bg, textAlign: "left", color: C.inkSoft }}>
                 {["Fecha", "Rubro", "Detalle", "Monto", "Medio", "Obs.", ""].map((h) => (
@@ -1464,13 +1469,13 @@ function GastosView({ data, update, esAsesora }) {
             <tbody>
               {gastosOrdenados.map((g) => (
                 <tr key={g.id} style={{ borderTop: `1px solid ${C.line}` }}>
-                  <td style={{ padding: "8px 12px" }}>{g.fecha}</td>
-                  <td style={{ padding: "8px 12px" }}>{g.rubro}</td>
-                  <td style={{ padding: "8px 12px", color: C.inkSoft }}>{g.detalle}</td>
-                  <td style={{ padding: "8px 12px", fontWeight: 600 }}>{money(g.monto)}</td>
-                  <td style={{ padding: "8px 12px" }}>{g.medioPago}</td>
-                  <td style={{ padding: "8px 12px", color: C.inkSoft }}>{g.observaciones}</td>
-                  <td style={{ padding: "8px 12px" }}>
+                  <td data-label="Fecha" style={{ padding: "8px 12px" }}>{g.fecha}</td>
+                  <td data-label="Rubro" style={{ padding: "8px 12px" }}>{g.rubro}</td>
+                  <td data-label="Detalle" style={{ padding: "8px 12px", color: C.inkSoft }}>{g.detalle}</td>
+                  <td data-label="Monto" style={{ padding: "8px 12px", fontWeight: 600 }}>{money(g.monto)}</td>
+                  <td data-label="Medio" style={{ padding: "8px 12px" }}>{g.medioPago}</td>
+                  <td data-label="Obs." style={{ padding: "8px 12px", color: C.inkSoft }}>{g.observaciones}</td>
+                  <td data-label="" style={{ padding: "8px 12px" }}>
                     <Trash2
                       size={15}
                       style={{ cursor: "pointer", color: C.inkFaint }}
@@ -1585,7 +1590,7 @@ function ProductosView({ data, update }) {
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 style={{ fontSize: 21, fontWeight: 700, color: C.ink, margin: 0 }}>Productos y Stock</h1>
           <div className="flex gap-2" style={{ marginTop: 10 }}>
@@ -1642,7 +1647,7 @@ function ProductosView({ data, update }) {
           )}
 
           <Card style={{ padding: 0, overflow: "visible" }}>
-            <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
+            <table className="tbl-responsive" style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
               <thead>
                 <tr style={{ background: C.bg, textAlign: "left", color: C.inkSoft }}>
                   {["Producto", "Código", "Familia", `P. ${data.listaLabels?.minorista || "Minorista"}`, `P. ${data.listaLabels?.mayorista || "Mayorista"}`, data.listaLabels?.otro || "Otro precio", "Stock hoy", "Stock mín.", ""].map((h) => (
@@ -1653,11 +1658,15 @@ function ProductosView({ data, update }) {
               <tbody>
                 {productosNormales.map((p) => {
                   const bajo = p.stockMinimo !== "" && p.stockMinimo != null && Number(p.stock) <= Number(p.stockMinimo);
+                  const labelMinorista = `P. ${data.listaLabels?.minorista || "Minorista"}`;
+                  const labelMayorista = `P. ${data.listaLabels?.mayorista || "Mayorista"}`;
+                  const labelOtro = data.listaLabels?.otro || "Otro precio";
+                  const labelPorCampo = { precioMinorista: labelMinorista, precioMayorista: labelMayorista, precioOtro: labelOtro };
                   return (
                     <React.Fragment key={p.id}>
                       <tr style={{ borderTop: `1px solid ${C.line}` }}>
-                        <td style={{ padding: "8px 12px", fontWeight: 500 }}>{p.nombre}</td>
-                        <td style={{ padding: "8px 12px" }}>
+                        <td data-label="Producto" style={{ padding: "8px 12px", fontWeight: 500 }}>{p.nombre}</td>
+                        <td data-label="Código" style={{ padding: "8px 12px" }}>
                           <TextInput
                             value={p.codigo || ""}
                             placeholder="—"
@@ -1665,13 +1674,13 @@ function ProductosView({ data, update }) {
                             style={{ width: 90, padding: "4px 8px" }}
                           />
                         </td>
-                        <td style={{ padding: "8px 12px" }}>
+                        <td data-label="Familia" style={{ padding: "8px 12px" }}>
                           <Select value={p.familia} onChange={(e) => actualizarProducto(p.id, "familia", e.target.value)} style={{ padding: "3px 6px", fontSize: 12.5 }}>
                             {data.familias.map((f) => <option key={f} value={f}>{f}</option>)}
                           </Select>
                         </td>
                         {["precioMinorista", "precioMayorista", "precioOtro"].map((campo) => (
-                          <td key={campo} style={{ padding: "8px 12px" }}>
+                          <td key={campo} data-label={labelPorCampo[campo]} style={{ padding: "8px 12px" }}>
                             <TextInput
                               type="number"
                               value={p[campo]}
@@ -1680,10 +1689,10 @@ function ProductosView({ data, update }) {
                             />
                           </td>
                         ))}
-                        <td style={{ padding: "8px 12px", fontWeight: 600, color: bajo ? C.rust : C.ink }}>
+                        <td data-label="Stock hoy" style={{ padding: "8px 12px", fontWeight: 600, color: bajo ? C.rust : C.ink }}>
                           {p.stock} {bajo && <AlertTriangle size={13} style={{ display: "inline", marginLeft: 4 }} />}
                         </td>
-                        <td style={{ padding: "8px 12px" }}>
+                        <td data-label="Stock mín." style={{ padding: "8px 12px" }}>
                           <TextInput
                             type="number"
                             value={p.stockMinimo}
@@ -1692,7 +1701,7 @@ function ProductosView({ data, update }) {
                             style={{ width: 65, padding: "4px 8px" }}
                           />
                         </td>
-                        <td style={{ padding: "8px 12px", whiteSpace: "nowrap" }}>
+                        <td data-label="" style={{ padding: "8px 12px", whiteSpace: "nowrap" }}>
                           <Button variant="ghost" style={{ padding: "4px 8px", fontSize: 12 }} onClick={() => setCargaStockId(cargaStockId === p.id ? null : p.id)}>
                             <PackagePlus size={14} /> Stock
                           </Button>
@@ -1798,7 +1807,7 @@ function ProductosView({ data, update }) {
           )}
 
           <Card style={{ padding: 0, overflow: "visible" }}>
-            <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
+            <table className="tbl-responsive" style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
               <thead>
                 <tr style={{ background: C.bg, textAlign: "left", color: C.inkSoft }}>
                   {["Combo", "Código", "Familia", "Precio", "Incluye", "Stock disponible", ""].map((h) => (
@@ -1811,25 +1820,25 @@ function ProductosView({ data, update }) {
                   const disponible = stockDisponibleCombo(p, data.productos);
                   return (
                     <tr key={p.id} style={{ borderTop: `1px solid ${C.line}` }}>
-                      <td style={{ padding: "8px 12px", fontWeight: 500 }}>{p.nombre}</td>
-                      <td style={{ padding: "8px 12px" }}>
+                      <td data-label="Combo" style={{ padding: "8px 12px", fontWeight: 500 }}>{p.nombre}</td>
+                      <td data-label="Código" style={{ padding: "8px 12px" }}>
                         <TextInput value={p.codigo || ""} placeholder="—" onChange={(e) => actualizarProducto(p.id, "codigo", e.target.value)} style={{ width: 90, padding: "4px 8px" }} />
                       </td>
-                      <td style={{ padding: "8px 12px" }}>
+                      <td data-label="Familia" style={{ padding: "8px 12px" }}>
                         <Select value={p.familia} onChange={(e) => actualizarProducto(p.id, "familia", e.target.value)} style={{ padding: "3px 6px", fontSize: 12.5 }}>
                           {data.familias.map((f) => <option key={f} value={f}>{f}</option>)}
                         </Select>
                       </td>
-                      <td style={{ padding: "8px 12px" }}>
+                      <td data-label="Precio" style={{ padding: "8px 12px" }}>
                         <MoneyField value={p.precioMinorista} onChange={(v) => actualizarPrecioCombo(p.id, v)} style={{ width: 100 }} />
                       </td>
-                      <td style={{ padding: "8px 12px", color: C.inkSoft, fontSize: 12.5 }}>
+                      <td data-label="Incluye" style={{ padding: "8px 12px", color: C.inkSoft, fontSize: 12.5 }}>
                         {(p.componentes || []).map((c) => `${c.cantidad}× ${componenteNombre(c.productoId)}`).join(", ")}
                       </td>
-                      <td style={{ padding: "8px 12px", fontWeight: 600, color: disponible === 0 ? C.rust : C.ink }}>
+                      <td data-label="Stock disponible" style={{ padding: "8px 12px", fontWeight: 600, color: disponible === 0 ? C.rust : C.ink }}>
                         {disponible}
                       </td>
-                      <td style={{ padding: "8px 12px" }}>
+                      <td data-label="" style={{ padding: "8px 12px" }}>
                         <Trash2 size={15} style={{ cursor: "pointer", color: C.inkFaint }} onClick={() => eliminarProducto(p.id)} />
                       </td>
                     </tr>
@@ -2500,7 +2509,7 @@ function ImportacionGenerica({ data, update }) {
           )}
           {resultado.nuevas.length > 0 && (
             <div style={{ maxHeight: 220, overflowY: "auto", marginBottom: 12 }}>
-              <table style={{ width: "100%", fontSize: 12.5, borderCollapse: "collapse" }}>
+              <table className="tbl-responsive" style={{ width: "100%", fontSize: 12.5, borderCollapse: "collapse" }}>
                 <thead>
                   <tr style={{ textAlign: "left", color: C.inkSoft }}>
                     <th style={{ padding: "4px 8px" }}>Fecha</th>
@@ -2517,15 +2526,15 @@ function ImportacionGenerica({ data, update }) {
                 <tbody>
                   {resultado.nuevas.slice(0, 30).map((v) => (
                     <tr key={v.id} style={{ borderTop: `1px solid ${C.line}` }}>
-                      <td style={{ padding: "4px 8px" }}>{v.fecha}</td>
-                      <td style={{ padding: "4px 8px" }}>{v.idExterno || "—"}</td>
-                      <td style={{ padding: "4px 8px" }}>{v.productoNombre}</td>
-                      <td style={{ padding: "4px 8px" }}>{v.cantidad}</td>
-                      <td style={{ padding: "4px 8px" }}>{money(v.precioUnitario)}</td>
-                      <td style={{ padding: "4px 8px" }}>{v.descuentoMonto ? money(v.descuentoMonto) : "—"}</td>
-                      <td style={{ padding: "4px 8px" }}>{money(v.total)}</td>
-                      <td style={{ padding: "4px 8px" }}>{v.medioPago}</td>
-                      <td style={{ padding: "4px 8px" }}>{v.estadoCobro || "acreditado"}</td>
+                      <td data-label="Fecha" style={{ padding: "4px 8px" }}>{v.fecha}</td>
+                      <td data-label="Orden" style={{ padding: "4px 8px" }}>{v.idExterno || "—"}</td>
+                      <td data-label="Producto" style={{ padding: "4px 8px" }}>{v.productoNombre}</td>
+                      <td data-label="Cant." style={{ padding: "4px 8px" }}>{v.cantidad}</td>
+                      <td data-label="P. unitario" style={{ padding: "4px 8px" }}>{money(v.precioUnitario)}</td>
+                      <td data-label="Desc." style={{ padding: "4px 8px" }}>{v.descuentoMonto ? money(v.descuentoMonto) : "—"}</td>
+                      <td data-label="Monto" style={{ padding: "4px 8px" }}>{money(v.total)}</td>
+                      <td data-label="Medio" style={{ padding: "4px 8px" }}>{v.medioPago}</td>
+                      <td data-label="Estado de cobro" style={{ padding: "4px 8px" }}>{v.estadoCobro || "acreditado"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -2986,7 +2995,7 @@ function MovimientosView({ data, update }) {
 
       {verHistorico && (
         <Card style={{ padding: 0, overflow: "hidden" }}>
-          <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
+          <table className="tbl-responsive" style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ background: C.bg, textAlign: "left", color: C.inkSoft }}>
                 {["Fecha", "Tipo", "Detalle", "Monto", "Obs.", ""].map((h) => (
@@ -2997,15 +3006,15 @@ function MovimientosView({ data, update }) {
             <tbody>
               {[...(data.movimientos || [])].sort((a, b) => (a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : 0)).map((m) => (
                 <tr key={m.id} style={{ borderTop: `1px solid ${C.line}` }}>
-                  <td style={{ padding: "8px 12px" }}>{m.fecha}</td>
-                  <td style={{ padding: "8px 12px" }}>{m.kind === "transferencia" ? "Transferencia" : m.motivoLabel}</td>
-                  <td style={{ padding: "8px 12px", color: C.inkSoft }}>
+                  <td data-label="Fecha" style={{ padding: "8px 12px" }}>{m.fecha}</td>
+                  <td data-label="Tipo" style={{ padding: "8px 12px" }}>{m.kind === "transferencia" ? "Transferencia" : m.motivoLabel}</td>
+                  <td data-label="Detalle" style={{ padding: "8px 12px", color: C.inkSoft }}>
                     {m.kind === "transferencia" ? `${m.medioOrigen} → ${m.medioDestino}` : m.medioPago}
                     {m.clienteNombre && <> · {m.clienteNombre}</>}
                   </td>
-                  <td style={{ padding: "8px 12px", fontWeight: 600, color: m.tipo === "egreso" ? C.rust : C.green }}>{money(m.monto)}</td>
-                  <td style={{ padding: "8px 12px", color: C.inkSoft }}>{m.observaciones}</td>
-                  <td style={{ padding: "8px 12px" }}>
+                  <td data-label="Monto" style={{ padding: "8px 12px", fontWeight: 600, color: m.tipo === "egreso" ? C.rust : C.green }}>{money(m.monto)}</td>
+                  <td data-label="Obs." style={{ padding: "8px 12px", color: C.inkSoft }}>{m.observaciones}</td>
+                  <td data-label="" style={{ padding: "8px 12px" }}>
                     <Trash2 size={15} style={{ cursor: "pointer", color: C.inkFaint }} onClick={() => eliminar(m.id)} />
                   </td>
                 </tr>
@@ -3161,7 +3170,7 @@ function ClientesView({ data, update }) {
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 style={{ fontSize: 21, fontWeight: 700, color: C.ink, margin: 0 }}>Clientes</h1>
           <p style={{ fontSize: 13, color: C.inkSoft, margin: "2px 0 0" }}>Cuenta corriente, historial y estadísticas por cliente.</p>
@@ -3194,7 +3203,7 @@ function ClientesView({ data, update }) {
       )}
 
       <Card style={{ padding: 0, overflow: "hidden" }}>
-        <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
+        <table className="tbl-responsive" style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
           <thead>
             <tr style={{ background: C.bg, textAlign: "left", color: C.inkSoft }}>
               {["Cliente", "Teléfono", "Localidad", "Última compra", "Ticket promedio", "Frecuencia", "Saldo", ""].map((h) => (
@@ -3205,15 +3214,15 @@ function ClientesView({ data, update }) {
           <tbody>
             {resumen.map((r) => (
               <tr key={r.cliente.id} style={{ borderTop: `1px solid ${C.line}`, cursor: "pointer" }} onClick={() => setSeleccionado(r.cliente.id)}>
-                <td style={{ padding: "8px 12px", fontWeight: 500 }}>{r.cliente.nombre}</td>
-                <td style={{ padding: "8px 12px", color: C.inkSoft }}>{r.cliente.telefono}</td>
-                <td style={{ padding: "8px 12px", color: C.inkSoft }}>{r.cliente.localidad}</td>
-                <td style={{ padding: "8px 12px" }}>{r.ultimaCompra || "—"}</td>
-                <td style={{ padding: "8px 12px" }}>{money(r.ticketPromedio)}</td>
-                <td style={{ padding: "8px 12px" }}>{r.frecuenciaDias != null ? `cada ${r.frecuenciaDias.toFixed(0)} días` : "N/D"}</td>
-                <td style={{ padding: "8px 12px", fontWeight: 600, color: r.saldo > 0 ? C.rust : C.green }}>{money(r.saldo)}</td>
-                <td style={{ padding: "8px 12px" }}>
-                  <Trash2 size={15} style={{ cursor: "pointer", color: C.inkFaint }} onClick={(e) => { e.stopPropagation(); eliminar(r.cliente.id); }} />
+                <td data-label="Cliente" style={{ padding: "8px 12px", fontWeight: 500 }}>{r.cliente.nombre}</td>
+                <td data-label="Teléfono" style={{ padding: "8px 12px", color: C.inkSoft }}>{r.cliente.telefono}</td>
+                <td data-label="Localidad" style={{ padding: "8px 12px", color: C.inkSoft }}>{r.cliente.localidad}</td>
+                <td data-label="Última compra" style={{ padding: "8px 12px" }}>{r.ultimaCompra || "—"}</td>
+                <td data-label="Ticket promedio" style={{ padding: "8px 12px" }}>{money(r.ticketPromedio)}</td>
+                <td data-label="Frecuencia" style={{ padding: "8px 12px" }}>{r.frecuenciaDias != null ? `cada ${r.frecuenciaDias.toFixed(0)} días` : "N/D"}</td>
+                <td data-label="Saldo" style={{ padding: "8px 12px", fontWeight: 600, color: r.saldo > 0 ? C.rust : C.green }}>{money(r.saldo)}</td>
+                <td data-label="" style={{ padding: "8px 12px" }} onClick={(e) => e.stopPropagation()}>
+                  <Trash2 size={15} style={{ cursor: "pointer", color: C.inkFaint }} onClick={() => eliminar(r.cliente.id)} />
                 </td>
               </tr>
             ))}
@@ -3322,7 +3331,7 @@ function CobrosPendientes({ data, update }) {
         <div style={{ fontSize: 13, color: C.inkFaint }}>No hay ventas pendientes de cobro para este medio.</div>
       ) : (
         <>
-          <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse", marginBottom: 12 }}>
+          <table className="tbl-responsive" style={{ width: "100%", fontSize: 13, borderCollapse: "collapse", marginBottom: 12 }}>
             <thead>
               <tr style={{ color: C.inkSoft, textAlign: "left" }}>
                 <th style={{ padding: "6px 8px" }}></th>
@@ -3335,13 +3344,13 @@ function CobrosPendientes({ data, update }) {
             <tbody>
               {pendientes.map((v) => (
                 <tr key={v.id} style={{ borderTop: `1px solid ${C.line}` }}>
-                  <td style={{ padding: "6px 8px" }}>
+                  <td data-label="Incluir" style={{ padding: "6px 8px" }}>
                     <input type="checkbox" checked={!!seleccion[v.id]} onChange={() => toggle(v.id)} />
                   </td>
-                  <td style={{ padding: "6px 8px" }}>{v.fecha}</td>
-                  <td style={{ padding: "6px 8px" }}>{v.productoNombre}</td>
-                  <td style={{ padding: "6px 8px", color: C.inkSoft }}>{v.fechaEstimadaAcreditacion}</td>
-                  <td style={{ padding: "6px 8px", textAlign: "right" }}>{money(v.total)}</td>
+                  <td data-label="Fecha" style={{ padding: "6px 8px" }}>{v.fecha}</td>
+                  <td data-label="Producto" style={{ padding: "6px 8px" }}>{v.productoNombre}</td>
+                  <td data-label="Fecha estimada" style={{ padding: "6px 8px", color: C.inkSoft }}>{v.fechaEstimadaAcreditacion}</td>
+                  <td data-label="Monto vendido" style={{ padding: "6px 8px", textAlign: "right" }}>{money(v.total)}</td>
                 </tr>
               ))}
             </tbody>
@@ -3471,14 +3480,14 @@ function ArqueoView({ data, update }) {
         const totalFinal = mediosCaja.reduce((acc, m) => acc + a.filas[m].final, 0);
         return (
           <Card key={a.id} style={{ padding: 18 }}>
-            <div className="flex items-center justify-between" style={{ marginBottom: 10 }}>
+            <div className="flex items-center justify-between flex-wrap gap-2" style={{ marginBottom: 10 }}>
               <div style={{ fontWeight: 600 }}>{a.desde} → {a.hasta}</div>
               <div className="flex items-center gap-3">
                 <div style={{ fontWeight: 700, color: C.green }}>Total: {money(totalFinal)}</div>
                 <Trash2 size={15} style={{ cursor: "pointer", color: C.inkFaint }} onClick={() => eliminarArqueo(a.id)} />
               </div>
             </div>
-            <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
+            <table className="tbl-responsive" style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
               <thead>
                 <tr style={{ color: C.inkSoft, textAlign: "left" }}>
                   <th style={{ padding: "6px 8px" }}>Medio de pago</th>
@@ -3491,11 +3500,11 @@ function ArqueoView({ data, update }) {
               <tbody>
                 {mediosCaja.map((m) => (
                   <tr key={m} style={{ borderTop: `1px solid ${C.line}` }}>
-                    <td style={{ padding: "6px 8px" }}>{m}</td>
-                    <td style={{ padding: "6px 8px", textAlign: "right" }}>{money(a.filas[m].inicial)}</td>
-                    <td style={{ padding: "6px 8px", textAlign: "right", color: C.green }}>{money(a.filas[m].ingresos)}</td>
-                    <td style={{ padding: "6px 8px", textAlign: "right", color: C.rust }}>{money(a.filas[m].egresos)}</td>
-                    <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: 600 }}>{money(a.filas[m].final)}</td>
+                    <td data-label="Medio de pago" style={{ padding: "6px 8px" }}>{m}</td>
+                    <td data-label="Saldo inicial" style={{ padding: "6px 8px", textAlign: "right" }}>{money(a.filas[m].inicial)}</td>
+                    <td data-label="Ingresos" style={{ padding: "6px 8px", textAlign: "right", color: C.green }}>{money(a.filas[m].ingresos)}</td>
+                    <td data-label="Egresos" style={{ padding: "6px 8px", textAlign: "right", color: C.rust }}>{money(a.filas[m].egresos)}</td>
+                    <td data-label="Saldo final" style={{ padding: "6px 8px", textAlign: "right", fontWeight: 600 }}>{money(a.filas[m].final)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -3555,7 +3564,7 @@ function ConfigView({ data, update, esAsesora }) {
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 style={{ fontSize: 21, fontWeight: 700, color: C.ink, margin: 0 }}>Configuración</h1>
           <p style={{ fontSize: 13, color: C.inkSoft, margin: "2px 0 0" }}>Estas listas alimentan los menús desplegables de ventas, gastos y productos.</p>
@@ -3951,6 +3960,12 @@ function ErrorBanner() {
 // ninguna de las pantallas de adentro (VentasView, GastosView, etc.) tuvo que cambiar.
 export function Negocio({ data, update, cabecera, esAsesora }) {
   const [tab, setTab] = useState("dashboard");
+  const [menuAbierto, setMenuAbierto] = useState(false);
+
+  function irA(id) {
+    setTab(id);
+    setMenuAbierto(false); // en el celular, elegir una sección cierra el menú
+  }
 
   const views = {
     dashboard: <Dashboard data={data} />,
@@ -3965,13 +3980,20 @@ export function Negocio({ data, update, cabecera, esAsesora }) {
   };
 
   return (
-    <div style={{ display: "flex", minHeight: 640, background: C.bg, fontFamily: FONT_STACK }}>
+    <div className="app-shell" style={{ display: "flex", minHeight: 640, background: C.bg, fontFamily: FONT_STACK }}>
       <FuenteGoogle />
       <ErrorBanner />
-      <Sidebar tab={tab} setTab={setTab} nombreNegocio={data.nombreNegocio} />
+      {menuAbierto && <div className="sidebar-backdrop" onClick={() => setMenuAbierto(false)} />}
+      <Sidebar tab={tab} setTab={irA} nombreNegocio={data.nombreNegocio} open={menuAbierto} onClose={() => setMenuAbierto(false)} />
       {/* zoom en vez de tocar cada fontSize a mano: achica letra+espaciados de los módulos
-          de forma pareja, sin afectar el menú de la izquierda (Sidebar, fuera de este div). */}
-      <div style={{ flex: 1, padding: 26, overflowX: "hidden", zoom: 0.92 }}>
+          de forma pareja en escritorio (en mobile, responsive.css lo desactiva). */}
+      <div className="app-content" style={{ flex: 1, padding: 26, overflowX: "hidden", zoom: 0.92, minWidth: 0 }}>
+        <div className="mobile-topbar">
+          <button className="hamburger-btn" onClick={() => setMenuAbierto(true)} aria-label="Abrir menú">
+            <Menu size={22} />
+          </button>
+          <div className="mobile-topbar-title">{data.nombreNegocio || "Mi Negocio"}</div>
+        </div>
         {cabecera}
         {views[tab]}
       </div>

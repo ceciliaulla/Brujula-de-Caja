@@ -1,0 +1,178 @@
+/* ============================================================
+   Responsive (mobile). Todo lo de acá vive dentro de un @media,
+   así que en escritorio no cambia nada de lo que ya funcionaba.
+   ============================================================ */
+
+.mobile-topbar { display: none; }
+.hamburger-btn { display: none; }
+.sidebar-backdrop { display: none; }
+.sidebar-close-btn { display: none; }
+
+@media (max-width: 860px) {
+
+  /* ---- Layout general: el sidebar deja de ocupar espacio en la fila
+     (pasa a position:fixed) y el contenido usa todo el ancho ---- */
+  .app-shell {
+    display: block !important;
+  }
+  .app-content {
+    zoom: 1 !important;         /* el achique de letra de escritorio no aplica en mobile */
+    padding: 14px !important;
+    width: 100%;
+    box-sizing: border-box;
+    min-width: 0;
+    overflow-x: hidden;
+  }
+
+  /* ---- Barra superior con el botón ☰ ---- */
+  .mobile-topbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: -14px -14px 14px;
+    padding: 10px 14px;
+    background: #4A3F66;
+    color: #fff;
+    position: sticky;
+    top: 0;
+    z-index: 60;
+  }
+  .mobile-topbar-title {
+    font-size: 15px;
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .hamburger-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    flex-shrink: 0;
+    border-radius: 8px;
+    border: none;
+    background: rgba(255,255,255,0.14);
+    color: #fff;
+    cursor: pointer;
+  }
+
+  /* ---- Menú lateral: drawer que entra desde la izquierda ----
+     El componente Sidebar fija width/position en línea (para el layout de escritorio),
+     así que acá hace falta !important en esas mismas propiedades para poder pisarlas. */
+  .sidebar {
+    position: fixed !important;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 80vw !important;
+    max-width: 300px;
+    min-height: 100vh !important;
+    transform: translateX(-101%);
+    transition: transform 0.25s ease;
+    z-index: 200;
+    box-shadow: 2px 0 20px rgba(0,0,0,0.28);
+    overflow-y: auto;
+  }
+  .sidebar.sidebar-open {
+    transform: translateX(0) !important;
+  }
+  .sidebar-close-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    border: none;
+    background: rgba(255,255,255,0.14);
+    color: #fff;
+    cursor: pointer;
+    position: absolute;
+    top: 16px;
+    right: 12px;
+  }
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(20,15,25,0.45);
+    z-index: 150;
+  }
+
+  /* ---- Controles cómodos para el dedo ---- */
+  button, input, select, textarea {
+    min-height: 40px;
+  }
+  input, select, textarea {
+    font-size: 16px !important; /* evita que iOS haga zoom automático al enfocar */
+  }
+  /* Los ícono-botones sueltos (tachos de basura, etc.) dentro de una fila de tabla
+     ganan área de toque sin que se vean más grandes que antes. */
+  table.tbl-responsive td svg {
+    padding: 8px;
+    box-sizing: content-box;
+  }
+
+  /* ---- Tarjetas y grillas: una sola columna ---- */
+  .grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ---- Tablas: se convierten en una lista de tarjetas, una por fila,
+     sin scroll horizontal. Requiere que cada <table> tenga la clase
+     "tbl-responsive" y cada <td> un atributo data-label="Columna". ---- */
+  table.tbl-responsive,
+  table.tbl-responsive tbody,
+  table.tbl-responsive tr {
+    display: block;
+    width: 100%;
+  }
+  table.tbl-responsive thead {
+    display: none;
+  }
+  table.tbl-responsive tr {
+    margin-bottom: 10px;
+    border: 1px solid #DCD5E6;
+    border-radius: 10px;
+    padding: 4px 10px;
+    background: #fff;
+  }
+  table.tbl-responsive td {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 0 !important;
+    border-top: 1px solid #EEEBF3 !important;
+    text-align: right;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  table.tbl-responsive tr td:first-child {
+    border-top: none !important;
+  }
+  table.tbl-responsive td[data-label]::before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: #726C82;
+    font-size: 12px;
+    text-align: left;
+    flex-shrink: 0;
+  }
+  /* Filas "especiales" (mensaje de tabla vacía, mini-formulario de carga de stock, etc.)
+     usan colSpan en el código: se muestran en bloque, tal cual, sin la etiqueta. */
+  table.tbl-responsive td[colspan] {
+    display: block !important;
+    text-align: left;
+  }
+  table.tbl-responsive td[colspan]::before {
+    content: none !important;
+  }
+  table.tbl-responsive td input,
+  table.tbl-responsive td select {
+    max-width: 60%;
+  }
+}

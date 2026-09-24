@@ -21,8 +21,8 @@ function Login() {
   }
 
   return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", fontFamily: "sans-serif", background: "#EEEBF3" }}>
-      <form onSubmit={entrar} style={{ background: "#fff", padding: 32, borderRadius: 10, boxShadow: "0 2px 12px rgba(0,0,0,0.08)", width: 320 }}>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", fontFamily: "sans-serif", background: "#EEEBF3", padding: 16, boxSizing: "border-box" }}>
+      <form onSubmit={entrar} style={{ background: "#fff", padding: 32, borderRadius: 10, boxShadow: "0 2px 12px rgba(0,0,0,0.08)", width: "100%", maxWidth: 320, boxSizing: "border-box" }}>
         <h2 style={{ marginTop: 0, color: "#2E293B" }}>Ingresar</h2>
         <input
           type="email"
@@ -52,7 +52,7 @@ function Login() {
 
 function SelectorCliente({ negocios, onElegir, onCerrarSesion }) {
   return (
-    <div style={{ maxWidth: 480, margin: "60px auto", fontFamily: "sans-serif", color: "#2E293B" }}>
+    <div style={{ maxWidth: 480, margin: "60px auto", fontFamily: "sans-serif", color: "#2E293B", padding: "0 16px", boxSizing: "border-box" }}>
       <h2>Elegí un cliente</h2>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {negocios.map((n) => (
