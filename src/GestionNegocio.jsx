@@ -8,7 +8,7 @@ import {
   Plus, Trash2, Upload, Package, ShoppingCart, Receipt,
   BarChart3, Settings, X, Check, AlertTriangle, PackagePlus, Pencil,
   Download, Wallet, ArrowLeftRight, HelpCircle, MessageSquarePlus,
-  ChevronDown, ChevronRight, Users, Menu,
+  ChevronDown, ChevronRight, Users, Menu, ArrowLeft,
 } from "lucide-react";
 
 const C = {
@@ -1563,7 +1563,258 @@ function GastosView({ data, update, esAsesora }) {
 }
 
 /* ---------- Productos y Stock ---------- */
+// true cuando la pantalla es de celular (mismo corte que responsive.css).
+function useEsMobile() {
+  const query = "(max-width: 860px)";
+  const [esMobile, setEsMobile] = useState(() => typeof window !== "undefined" && window.matchMedia(query).matches);
+  useEffect(() => {
+    const mq = window.matchMedia(query);
+    const onChange = (e) => setEsMobile(e.matches);
+    setEsMobile(mq.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+  return esMobile;
+}
+
+// Pantalla de detalle de un producto (celular y escritorio): acá se edita todo lo del producto
+// (el nombre no se edita).
+// Los cambios de datos se aplican con "Guardar cambios"; la carga de stock es una acción
+// aparte (registra un movimiento de stock) y se aplica al confirmarla.
+function ProductoDetalle({ producto, data, onGuardar, onEliminar, cargaForm, setCargaForm, onConfirmarCarga, onVolver }) {
+  const [draft, setDraft] = useState({
+    codigo: producto.codigo || "",
+    familia: producto.familia || "",
+    precioMinorista: producto.precioMinorista ?? 0,
+    precioMayorista: producto.precioMayorista ?? 0,
+    precioOtro: producto.precioOtro ?? 0,
+    stockMinimo: producto.stockMinimo ?? "",
+  });
+  const [mostrarCarga, setMostrarCarga] = useState(false);
+  const [confirmarEliminar, setConfirmarEliminar] = useState(false);
+
+  const bajo = producto.stockMinimo !== "" && producto.stockMinimo != null && Number(producto.stock) <= Number(producto.stockMinimo);
+  const full = { width: "100%", boxSizing: "border-box" };
+  const set = (campo) => (e) => setDraft({ ...draft, [campo]: e.target.value });
+
+  function guardar() {
+    onGuardar(producto.id, {
+      codigo: draft.codigo,
+      familia: draft.familia,
+      precioMinorista: Number(draft.precioMinorista) || 0,
+      precioMayorista: Number(draft.precioMayorista) || 0,
+      precioOtro: Number(draft.precioOtro) || 0,
+      stockMinimo: draft.stockMinimo,
+    });
+  }
+  function confirmarCarga() {
+    if (!Number(cargaForm.cantidad)) return;
+    onConfirmarCarga(producto);
+    setMostrarCarga(false);
+  }
+
+  return (
+    <div className="flex flex-col gap-4" style={{ maxWidth: 560 }}>
+      <div>
+        <button
+          onClick={onVolver}
+          style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "none", border: "none", color: C.greenDark, cursor: "pointer", fontSize: 14, padding: 0 }}
+        >
+          <ArrowLeft size={16} /> Volver a la lista
+        </button>
+        <h1 style={{ fontSize: 21, fontWeight: 700, color: C.ink, margin: "8px 0 0" }}>{producto.nombre}</h1>
+      </div>
+
+      <Card style={{ padding: 16 }}>
+        <div className="flex items-center justify-between" style={{ gap: 10 }}>
+          <div>
+            <div style={{ fontSize: 12.5, color: C.inkSoft }}>Stock hoy</div>
+            <div style={{ fontSize: 26, fontWeight: 700, color: bajo ? C.rust : C.ink }}>
+              {producto.stock} {bajo && <AlertTriangle size={18} style={{ display: "inline", marginLeft: 4 }} />}
+            </div>
+            {bajo && <div style={{ fontSize: 12, color: C.rust }}>Igual o por debajo del mínimo ({producto.stockMinimo})</div>}
+          </div>
+          <Button variant="ghost" onClick={() => setMostrarCarga(!mostrarCarga)}>
+            <PackagePlus size={15} /> Sumar stock
+          </Button>
+        </div>
+        {mostrarCarga && (
+          <div className="flex flex-col gap-3" style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${C.line}` }}>
+            <Field label="Fecha">
+              <TextInput type="date" value={cargaForm.fecha} onChange={(e) => setCargaForm({ ...cargaForm, fecha: e.target.value })} style={full} />
+            </Field>
+            <Field label="Cantidad a sumar">
+              <TextInput type="number" inputMode="numeric" value={cargaForm.cantidad} onChange={(e) => setCargaForm({ ...cargaForm, cantidad: e.target.value })} style={full} />
+            </Field>
+            <Field label="Motivo">
+              <TextInput value={cargaForm.motivo} onChange={(e) => setCargaForm({ ...cargaForm, motivo: e.target.value })} style={full} />
+            </Field>
+            <div className="flex gap-2">
+              <Button onClick={confirmarCarga}><Check size={14} /> Confirmar</Button>
+              <Button variant="ghost" onClick={() => setMostrarCarga(false)}>Cancelar</Button>
+            </div>
+          </div>
+        )}
+      </Card>
+
+      <Card style={{ padding: 16 }}>
+        <div className="flex flex-col gap-3">
+          <Field label="Código (SKU, opcional)">
+            <TextInput value={draft.codigo} onChange={set("codigo")} placeholder="—" style={full} />
+          </Field>
+          <Field label="Familia">
+            <Select value={draft.familia} onChange={set("familia")} style={full}>
+              {data.familias.map((f) => <option key={f} value={f}>{f}</option>)}
+              {draft.familia && !data.familias.includes(draft.familia) && <option value={draft.familia}>{draft.familia}</option>}
+            </Select>
+          </Field>
+          <Field label={`P. ${data.listaLabels?.minorista || "Minorista"}`}>
+            <TextInput type="number" inputMode="decimal" value={draft.precioMinorista} onChange={set("precioMinorista")} style={full} />
+          </Field>
+          <Field label={`P. ${data.listaLabels?.mayorista || "Mayorista"}`}>
+            <TextInput type="number" inputMode="decimal" value={draft.precioMayorista} onChange={set("precioMayorista")} style={full} />
+          </Field>
+          <Field label={data.listaLabels?.otro || "Otro precio"}>
+            <TextInput type="number" inputMode="decimal" value={draft.precioOtro} onChange={set("precioOtro")} style={full} />
+          </Field>
+          <Field label="Stock mínimo (opcional)">
+            <TextInput type="number" inputMode="numeric" value={draft.stockMinimo} onChange={set("stockMinimo")} placeholder="—" style={full} />
+          </Field>
+        </div>
+        <div className="flex gap-2" style={{ marginTop: 16 }}>
+          <Button onClick={guardar}><Check size={15} /> Guardar cambios</Button>
+          <Button variant="ghost" onClick={onVolver}>Cancelar</Button>
+        </div>
+      </Card>
+
+      <div>
+        <Button variant="danger" onClick={() => setConfirmarEliminar(true)}>
+          <Trash2 size={14} /> Eliminar producto
+        </Button>
+      </div>
+
+      {confirmarEliminar && (
+        <ConfirmDialog
+          mensaje={`¿Eliminar "${producto.nombre}"? Las ventas ya registradas no se modifican, pero el producto deja de estar disponible.`}
+          onConfirmar={() => onEliminar(producto.id)}
+          onCancelar={() => setConfirmarEliminar(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+// Lista compacta de una línea por ítem (celular): nombre (+ código) a la izquierda, valor a la derecha.
+function ListaCompacta({ filas, cabeceraDerecha, vacio, onAbrir }) {
+  return (
+    <Card style={{ padding: 0, overflow: "hidden" }}>
+      <div className="flex items-center justify-between" style={{ padding: "8px 14px", background: C.bg, color: C.inkSoft, fontSize: 12.5, fontWeight: 600 }}>
+        <span>Nombre</span>
+        <span>{cabeceraDerecha}</span>
+      </div>
+      {filas.map((f) => (
+        <button
+          key={f.id}
+          onClick={() => onAbrir(f.id)}
+          style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
+            width: "100%", padding: "10px 14px", background: "transparent", border: "none",
+            borderTop: `1px solid ${C.line}`, textAlign: "left", cursor: "pointer", color: C.ink,
+          }}
+        >
+          <span style={{ minWidth: 0 }}>
+            <span style={{ display: "block", fontSize: 14, fontWeight: 500 }}>{f.nombre}</span>
+            {f.codigo ? <span style={{ display: "block", fontSize: 11.5, color: C.inkFaint }}>{f.codigo}</span> : null}
+          </span>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, flexShrink: 0, fontWeight: 600, fontSize: 14, color: f.alerta ? C.rust : C.ink }}>
+            {f.alerta && <AlertTriangle size={14} />}
+            {f.valor}
+            <ChevronRight size={16} color={C.inkFaint} />
+          </span>
+        </button>
+      ))}
+      {filas.length === 0 && <div style={{ padding: 24, textAlign: "center", color: C.inkFaint, fontSize: 13 }}>{vacio}</div>}
+    </Card>
+  );
+}
+
+// Pantalla de detalle de un combo (celular y escritorio). Nombre y composición no se editan acá.
+function ComboDetalle({ combo, data, disponible, incluye, onGuardar, onEliminar, onVolver }) {
+  const [draft, setDraft] = useState({
+    codigo: combo.codigo || "",
+    familia: combo.familia || "",
+    precio: combo.precioMinorista ?? 0,
+  });
+  const [confirmarEliminar, setConfirmarEliminar] = useState(false);
+  const full = { width: "100%", boxSizing: "border-box" };
+
+  function guardar() {
+    const precio = Number(draft.precio) || 0;
+    onGuardar(combo.id, { codigo: draft.codigo, familia: draft.familia, precioMinorista: precio, precioMayorista: precio, precioOtro: precio });
+  }
+
+  return (
+    <div className="flex flex-col gap-4" style={{ maxWidth: 560 }}>
+      <div>
+        <button
+          onClick={onVolver}
+          style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "none", border: "none", color: C.greenDark, cursor: "pointer", fontSize: 14, padding: 0 }}
+        >
+          <ArrowLeft size={16} /> Volver a la lista
+        </button>
+        <h1 style={{ fontSize: 21, fontWeight: 700, color: C.ink, margin: "8px 0 0" }}>{combo.nombre}</h1>
+      </div>
+
+      <Card style={{ padding: 16 }}>
+        <div style={{ fontSize: 12.5, color: C.inkSoft }}>Stock disponible</div>
+        <div style={{ fontSize: 26, fontWeight: 700, color: disponible === 0 ? C.rust : C.ink }}>{disponible}</div>
+        <div style={{ fontSize: 12.5, color: C.inkSoft, marginTop: 6 }}>
+          Incluye: {incluye || "—"}
+        </div>
+      </Card>
+
+      <Card style={{ padding: 16 }}>
+        <div className="flex flex-col gap-3">
+          <Field label="Código (SKU, opcional)">
+            <TextInput value={draft.codigo} onChange={(e) => setDraft({ ...draft, codigo: e.target.value })} placeholder="—" style={full} />
+          </Field>
+          <Field label="Familia">
+            <Select value={draft.familia} onChange={(e) => setDraft({ ...draft, familia: e.target.value })} style={full}>
+              {data.familias.map((f) => <option key={f} value={f}>{f}</option>)}
+              {draft.familia && !data.familias.includes(draft.familia) && <option value={draft.familia}>{draft.familia}</option>}
+            </Select>
+          </Field>
+          <Field label="Precio del combo">
+            <MoneyField value={draft.precio} onChange={(v) => setDraft({ ...draft, precio: v })} style={full} />
+          </Field>
+        </div>
+        <div className="flex gap-2" style={{ marginTop: 16 }}>
+          <Button onClick={guardar}><Check size={15} /> Guardar cambios</Button>
+          <Button variant="ghost" onClick={onVolver}>Cancelar</Button>
+        </div>
+      </Card>
+
+      <div>
+        <Button variant="danger" onClick={() => setConfirmarEliminar(true)}>
+          <Trash2 size={14} /> Eliminar combo
+        </Button>
+      </div>
+
+      {confirmarEliminar && (
+        <ConfirmDialog
+          mensaje={`¿Eliminar el combo "${combo.nombre}"? Las ventas ya registradas no se modifican, pero el combo deja de estar disponible.`}
+          onConfirmar={() => onEliminar(combo.id)}
+          onCancelar={() => setConfirmarEliminar(false)}
+        />
+      )}
+    </div>
+  );
+}
+
 function ProductosView({ data, update }) {
+  const esMobile = useEsMobile();
+  const [detalleId, setDetalleId] = useState(null); // producto/combo abierto en la pantalla de detalle
+  const [eliminarPendiente, setEliminarPendiente] = useState(null); // ítem a confirmar antes de borrar desde la tabla
   const [vista, setVista] = useState("productos"); // "productos" | "combos"
   const [nuevo, setNuevo] = useState(null);
   const [cargaStockId, setCargaStockId] = useState(null);
@@ -1582,11 +1833,13 @@ function ProductosView({ data, update }) {
     update({ ...data, productos: [...data.productos, { id: uid(), ...nuevo }] });
     setNuevo(null);
   }
-  function actualizarProducto(id, campo, valor) {
-    update({ ...data, productos: data.productos.map((p) => (p.id === id ? { ...p, [campo]: valor } : p)) });
-  }
   function eliminarProducto(id) {
     update({ ...data, productos: data.productos.filter((p) => p.id !== id) });
+  }
+  // Aplica varios campos de una vez sobre el producto más reciente (no pisa el stock).
+  function guardarProductoDetalle(id, campos) {
+    update({ ...data, productos: data.productos.map((p) => (p.id === id ? { ...p, ...campos } : p)) });
+    setDetalleId(null);
   }
   function confirmarCarga(producto) {
     const cant = Number(cargaForm.cantidad) || 0;
@@ -1637,15 +1890,40 @@ function ProductosView({ data, update }) {
     });
     setNuevoCombo(null);
   }
-  function actualizarPrecioCombo(id, valor) {
-    const precio = Number(valor) || 0;
-    update({
-      ...data,
-      productos: data.productos.map((p) => (p.id === id ? { ...p, precioMinorista: precio, precioMayorista: precio, precioOtro: precio } : p)),
-    });
-  }
   const sumaReferenciaNuevoCombo = nuevoCombo ? sumaReferenciaCombo(nuevoCombo.componentes, data.productos) : 0;
   const componenteNombre = (id) => data.productos.find((p) => p.id === id)?.nombre || "?";
+
+  const productoDetalle = detalleId ? productosNormales.find((p) => p.id === detalleId) : null;
+  if (vista === "productos" && productoDetalle) {
+    return (
+      <ProductoDetalle
+        key={productoDetalle.id}
+        producto={productoDetalle}
+        data={data}
+        onGuardar={guardarProductoDetalle}
+        onEliminar={(id) => { eliminarProducto(id); setDetalleId(null); }}
+        cargaForm={cargaForm}
+        setCargaForm={setCargaForm}
+        onConfirmarCarga={confirmarCarga}
+        onVolver={() => setDetalleId(null)}
+      />
+    );
+  }
+  const comboDetalle = detalleId ? combos.find((c) => c.id === detalleId) : null;
+  if (vista === "combos" && comboDetalle) {
+    return (
+      <ComboDetalle
+        key={comboDetalle.id}
+        combo={comboDetalle}
+        data={data}
+        disponible={stockDisponibleCombo(comboDetalle, data.productos)}
+        incluye={(comboDetalle.componentes || []).map((c) => `${c.cantidad}× ${componenteNombre(c.productoId)}`).join(", ")}
+        onGuardar={guardarProductoDetalle}
+        onEliminar={(id) => { eliminarProducto(id); setDetalleId(null); }}
+        onVolver={() => setDetalleId(null)}
+      />
+    );
+  }
 
   return (
     <div className="flex flex-col gap-5">
@@ -1705,6 +1983,20 @@ function ProductosView({ data, update }) {
             </Card>
           )}
 
+          {esMobile ? (
+            <ListaCompacta
+              filas={productosNormales.map((p) => ({
+                id: p.id,
+                nombre: p.nombre,
+                codigo: p.codigo,
+                valor: p.stock,
+                alerta: p.stockMinimo !== "" && p.stockMinimo != null && Number(p.stock) <= Number(p.stockMinimo),
+              }))}
+              cabeceraDerecha="Stock"
+              vacio="Todavía no cargaste ningún producto."
+              onAbrir={setDetalleId}
+            />
+          ) : (
           <Card style={{ padding: 0, overflow: "visible" }}>
             <table className="tbl-responsive" style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
               <thead>
@@ -1725,46 +2017,25 @@ function ProductosView({ data, update }) {
                     <React.Fragment key={p.id}>
                       <tr style={{ borderTop: `1px solid ${C.line}` }}>
                         <td data-label="Producto" style={{ padding: "8px 12px", fontWeight: 500 }}>{p.nombre}</td>
-                        <td data-label="Código" style={{ padding: "8px 12px" }}>
-                          <TextInput
-                            value={p.codigo || ""}
-                            placeholder="—"
-                            onChange={(e) => actualizarProducto(p.id, "codigo", e.target.value)}
-                            style={{ width: 90, padding: "4px 8px" }}
-                          />
-                        </td>
-                        <td data-label="Familia" style={{ padding: "8px 12px" }}>
-                          <Select value={p.familia} onChange={(e) => actualizarProducto(p.id, "familia", e.target.value)} style={{ padding: "3px 6px", fontSize: 12.5 }}>
-                            {data.familias.map((f) => <option key={f} value={f}>{f}</option>)}
-                          </Select>
-                        </td>
+                        <td data-label="Código" style={{ padding: "8px 12px", color: C.inkSoft }}>{p.codigo || "—"}</td>
+                        <td data-label="Familia" style={{ padding: "8px 12px" }}>{p.familia}</td>
                         {["precioMinorista", "precioMayorista", "precioOtro"].map((campo) => (
-                          <td key={campo} data-label={labelPorCampo[campo]} style={{ padding: "8px 12px" }}>
-                            <TextInput
-                              type="number"
-                              value={p[campo]}
-                              onChange={(e) => actualizarProducto(p.id, campo, Number(e.target.value))}
-                              style={{ width: 85, padding: "4px 8px" }}
-                            />
-                          </td>
+                          <td key={campo} data-label={labelPorCampo[campo]} style={{ padding: "8px 12px" }}>{money(p[campo])}</td>
                         ))}
                         <td data-label="Stock hoy" style={{ padding: "8px 12px", fontWeight: 600, color: bajo ? C.rust : C.ink }}>
                           {p.stock} {bajo && <AlertTriangle size={13} style={{ display: "inline", marginLeft: 4 }} />}
                         </td>
-                        <td data-label="Stock mín." style={{ padding: "8px 12px" }}>
-                          <TextInput
-                            type="number"
-                            value={p.stockMinimo}
-                            placeholder="—"
-                            onChange={(e) => actualizarProducto(p.id, "stockMinimo", e.target.value)}
-                            style={{ width: 65, padding: "4px 8px" }}
-                          />
+                        <td data-label="Stock mín." style={{ padding: "8px 12px", color: C.inkSoft }}>
+                          {p.stockMinimo !== "" && p.stockMinimo != null ? p.stockMinimo : "—"}
                         </td>
                         <td data-label="" style={{ padding: "8px 12px", whiteSpace: "nowrap" }}>
-                          <Button variant="ghost" style={{ padding: "4px 8px", fontSize: 12 }} onClick={() => setCargaStockId(cargaStockId === p.id ? null : p.id)}>
+                          <Button variant="ghost" style={{ padding: "4px 8px", fontSize: 12 }} onClick={() => setDetalleId(p.id)}>
+                            <Pencil size={13} /> Editar
+                          </Button>
+                          <Button variant="ghost" style={{ padding: "4px 8px", fontSize: 12, marginLeft: 6 }} onClick={() => setCargaStockId(cargaStockId === p.id ? null : p.id)}>
                             <PackagePlus size={14} /> Stock
                           </Button>
-                          <Trash2 size={15} style={{ cursor: "pointer", color: C.inkFaint, display: "inline", marginLeft: 10 }} onClick={() => eliminarProducto(p.id)} />
+                          <Trash2 size={15} style={{ cursor: "pointer", color: C.inkFaint, display: "inline", marginLeft: 10 }} onClick={() => setEliminarPendiente(p)} />
                         </td>
                       </tr>
                       {cargaStockId === p.id && (
@@ -1795,6 +2066,7 @@ function ProductosView({ data, update }) {
               </tbody>
             </table>
           </Card>
+          )}
         </>
       )}
 
@@ -1865,6 +2137,17 @@ function ProductosView({ data, update }) {
             </Card>
           )}
 
+          {esMobile ? (
+            <ListaCompacta
+              filas={combos.map((p) => {
+                const disp = stockDisponibleCombo(p, data.productos);
+                return { id: p.id, nombre: p.nombre, codigo: p.codigo, valor: disp, alerta: disp === 0 };
+              })}
+              cabeceraDerecha="Disponible"
+              vacio="Todavía no armaste ningún combo."
+              onAbrir={setDetalleId}
+            />
+          ) : (
           <Card style={{ padding: 0, overflow: "visible" }}>
             <table className="tbl-responsive" style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
               <thead>
@@ -1880,25 +2163,20 @@ function ProductosView({ data, update }) {
                   return (
                     <tr key={p.id} style={{ borderTop: `1px solid ${C.line}` }}>
                       <td data-label="Combo" style={{ padding: "8px 12px", fontWeight: 500 }}>{p.nombre}</td>
-                      <td data-label="Código" style={{ padding: "8px 12px" }}>
-                        <TextInput value={p.codigo || ""} placeholder="—" onChange={(e) => actualizarProducto(p.id, "codigo", e.target.value)} style={{ width: 90, padding: "4px 8px" }} />
-                      </td>
-                      <td data-label="Familia" style={{ padding: "8px 12px" }}>
-                        <Select value={p.familia} onChange={(e) => actualizarProducto(p.id, "familia", e.target.value)} style={{ padding: "3px 6px", fontSize: 12.5 }}>
-                          {data.familias.map((f) => <option key={f} value={f}>{f}</option>)}
-                        </Select>
-                      </td>
-                      <td data-label="Precio" style={{ padding: "8px 12px" }}>
-                        <MoneyField value={p.precioMinorista} onChange={(v) => actualizarPrecioCombo(p.id, v)} style={{ width: 100 }} />
-                      </td>
+                      <td data-label="Código" style={{ padding: "8px 12px", color: C.inkSoft }}>{p.codigo || "—"}</td>
+                      <td data-label="Familia" style={{ padding: "8px 12px" }}>{p.familia}</td>
+                      <td data-label="Precio" style={{ padding: "8px 12px" }}>{money(p.precioMinorista)}</td>
                       <td data-label="Incluye" style={{ padding: "8px 12px", color: C.inkSoft, fontSize: 12.5 }}>
                         {(p.componentes || []).map((c) => `${c.cantidad}× ${componenteNombre(c.productoId)}`).join(", ")}
                       </td>
                       <td data-label="Stock disponible" style={{ padding: "8px 12px", fontWeight: 600, color: disponible === 0 ? C.rust : C.ink }}>
                         {disponible}
                       </td>
-                      <td data-label="" style={{ padding: "8px 12px" }}>
-                        <Trash2 size={15} style={{ cursor: "pointer", color: C.inkFaint }} onClick={() => eliminarProducto(p.id)} />
+                      <td data-label="" style={{ padding: "8px 12px", whiteSpace: "nowrap" }}>
+                        <Button variant="ghost" style={{ padding: "4px 8px", fontSize: 12 }} onClick={() => setDetalleId(p.id)}>
+                          <Pencil size={13} /> Editar
+                        </Button>
+                        <Trash2 size={15} style={{ cursor: "pointer", color: C.inkFaint, display: "inline", marginLeft: 10 }} onClick={() => setEliminarPendiente(p)} />
                       </td>
                     </tr>
                   );
@@ -1909,7 +2187,16 @@ function ProductosView({ data, update }) {
               </tbody>
             </table>
           </Card>
+          )}
         </>
+      )}
+
+      {eliminarPendiente && (
+        <ConfirmDialog
+          mensaje={`¿Eliminar ${esCombo(eliminarPendiente) ? "el combo" : "el producto"} "${eliminarPendiente.nombre}"? Las ventas ya registradas no se modifican, pero deja de estar disponible.`}
+          onConfirmar={() => { eliminarProducto(eliminarPendiente.id); setEliminarPendiente(null); }}
+          onCancelar={() => setEliminarPendiente(null)}
+        />
       )}
     </div>
   );
