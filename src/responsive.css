@@ -7,6 +7,7 @@
 .hamburger-btn { display: none; }
 .sidebar-backdrop { display: none; }
 .sidebar-close-btn { display: none; }
+.sidebar-logo { display: none; }
 
 @media (max-width: 860px) {
 
@@ -174,5 +175,21 @@
   table.tbl-responsive td input,
   table.tbl-responsive td select {
     max-width: 60%;
+  }
+
+  /* ---- Logo: en escritorio es una marca de agua fija sobre el menú; en mobile el menú
+     es un drawer, así que el logo va adentro del drawer, con la misma proporción
+     respecto del ancho del menú (140px sobre 210px = ~67%). ---- */
+  .marca-agua { display: none !important; }
+  .sidebar-logo {
+    display: block;
+    position: absolute;
+    bottom: 60px;
+    left: 8.6%;
+    width: 66.7%;
+    opacity: 0.55;
+    filter: brightness(0) invert(1);
+    pointer-events: none;
+    user-select: none;
   }
 }

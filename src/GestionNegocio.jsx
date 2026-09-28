@@ -144,6 +144,43 @@ function estaAcreditadaVenta(v) {
   if (!v.estadoCobro || v.estadoCobro === "acreditado") return true;
   return v.fechaEstimadaAcreditacion ? v.fechaEstimadaAcreditacion <= todayStr() : false;
 }
+// ---------- Arqueo (lógica compartida entre ArqueoView y el backup completo) ----------
+function calcularFilaArqueo(data, mediosCaja, desde, hasta, saldoInicial) {
+  const filtrar = (arr) => arr.filter((it) => it.fecha >= desde && it.fecha <= hasta);
+  const movs = filtrar(data.movimientos || []);
+  const filas = {};
+  mediosCaja.forEach((medio) => {
+    let ingresos = filtrar(data.ventas).filter((v) => v.medioPago === medio && estaAcreditadaVenta(v)).reduce((a, v) => a + v.total, 0);
+    let egresos = filtrar(data.gastos).filter((g) => g.medioPago === medio).reduce((a, g) => a + Number(g.monto), 0);
+    movs.forEach((m) => {
+      if (m.kind === "transferencia") {
+        if (m.medioOrigen === medio) egresos += Number(m.monto);
+        if (m.medioDestino === medio) ingresos += Number(m.monto);
+      } else if (m.medioPago === medio) {
+        if (m.tipo === "ingreso") ingresos += Number(m.monto);
+        else egresos += Number(m.monto);
+      }
+    });
+    const inicial = Number((saldoInicial && saldoInicial[medio]) || 0);
+    filas[medio] = { inicial, ingresos, egresos, final: inicial + ingresos - egresos };
+  });
+  return filas;
+}
+// Todos los arqueos guardados, ya con sus columnas (inicial/ingresos/egresos/final) calculadas
+// y el saldo encadenado de uno al siguiente — la misma cuenta que hace ArqueoView en pantalla.
+function arqueosConFilas(data) {
+  const mediosCaja = (data.medios || []).filter((m) => m !== MEDIO_CTA_CTE);
+  const arqueosOrdenados = [...(data.arqueos || [])].sort((a, b) => (a.desde < b.desde ? -1 : 1));
+  let saldoPrevio = null;
+  return arqueosOrdenados.map((a) => {
+    const inicial = saldoPrevio || a.saldoInicialManual || {};
+    const filas = calcularFilaArqueo(data, mediosCaja, a.desde, a.hasta, inicial);
+    const finalPorMedio = {};
+    mediosCaja.forEach((m) => (finalPorMedio[m] = filas[m].final));
+    saldoPrevio = finalPorMedio;
+    return { ...a, filas, mediosCaja };
+  });
+}
 const RUBROS_DEFAULT = [
   "Costos Fijos",
   "Proveedores",
@@ -429,7 +466,7 @@ function deltaInfo(pctValue, invertirColor) {
 }
 
 /* ---------- Sidebar ---------- */
-function Sidebar({ tab, setTab, nombreNegocio, open, onClose }) {
+function Sidebar({ tab, setTab, nombreNegocio, open, onClose, stockBajoCount = 0 }) {
   const items = [
     { id: "dashboard", label: "Indicadores", icon: BarChart3 },
     { id: "ventas", label: "Ventas", icon: ShoppingCart },
@@ -437,7 +474,7 @@ function Sidebar({ tab, setTab, nombreNegocio, open, onClose }) {
     { id: "movimientos", label: "Movimientos de Caja", icon: ArrowLeftRight },
     { id: "clientes", label: "Clientes", icon: Users },
     { id: "arqueo", label: "Arqueo de Caja", icon: Wallet },
-    { id: "productos", label: "Productos y Stock", icon: Package },
+    { id: "productos", label: "Productos y Stock", icon: Package, badge: stockBajoCount },
     { id: "importar", label: "Importar Excel", icon: Upload },
     { id: "config", label: "Configuración", icon: Settings },
   ];
@@ -486,10 +523,32 @@ function Sidebar({ tab, setTab, nombreNegocio, open, onClose }) {
             }}
           >
             <Icon size={16} />
-            {it.label}
+            <span style={{ flex: 1 }}>{it.label}</span>
+            {!!it.badge && (
+              <span
+                title={`${it.badge} producto${it.badge === 1 ? "" : "s"} con stock bajo`}
+                style={{
+                  background: C.rust,
+                  color: "#fff",
+                  borderRadius: 999,
+                  fontSize: 11,
+                  fontWeight: 700,
+                  minWidth: 18,
+                  height: 18,
+                  padding: "0 5px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                }}
+              >
+                {it.badge}
+              </span>
+            )}
           </button>
         );
       })}
+      <img className="sidebar-logo" src={LOGO_CECILIA_B64} alt="" />
     </div>
   );
 }
@@ -3381,45 +3440,11 @@ function ArqueoView({ data, update }) {
   const [saldoManual, setSaldoManual] = useState({});
   const mediosCaja = data.medios.filter((m) => m !== MEDIO_CTA_CTE);
 
-  const arqueosOrdenados = useMemo(
-    () => [...data.arqueos].sort((a, b) => (a.desde < b.desde ? -1 : 1)),
-    [data.arqueos]
-  );
-
-  function calcularFila(desde, hasta, saldoInicial) {
-    const filtrar = (arr) => arr.filter((it) => it.fecha >= desde && it.fecha <= hasta);
-    const movs = filtrar(data.movimientos || []);
-    const filas = {};
-    mediosCaja.forEach((medio) => {
-      let ingresos = filtrar(data.ventas).filter((v) => v.medioPago === medio && estaAcreditadaVenta(v)).reduce((a, v) => a + v.total, 0);
-      let egresos = filtrar(data.gastos).filter((g) => g.medioPago === medio).reduce((a, g) => a + Number(g.monto), 0);
-      movs.forEach((m) => {
-        if (m.kind === "transferencia") {
-          if (m.medioOrigen === medio) egresos += Number(m.monto);
-          if (m.medioDestino === medio) ingresos += Number(m.monto);
-        } else if (m.medioPago === medio) {
-          if (m.tipo === "ingreso") ingresos += Number(m.monto);
-          else egresos += Number(m.monto);
-        }
-      });
-      const inicial = Number((saldoInicial && saldoInicial[medio]) || 0);
-      filas[medio] = { inicial, ingresos, egresos, final: inicial + ingresos - egresos };
-    });
-    return filas;
-  }
-
   // saldo inicial de un arqueo = saldo final del arqueo anterior (o manual, si es el primero)
-  const arqueosCalculados = useMemo(() => {
-    let saldoPrevio = null;
-    return arqueosOrdenados.map((a) => {
-      const inicial = saldoPrevio || a.saldoInicialManual || {};
-      const filas = calcularFila(a.desde, a.hasta, inicial);
-      const finalPorMedio = {};
-      mediosCaja.forEach((m) => (finalPorMedio[m] = filas[m].final));
-      saldoPrevio = finalPorMedio;
-      return { ...a, filas };
-    });
-  }, [arqueosOrdenados, data.ventas, data.gastos, data.movimientos, data.medios]); // eslint-disable-line
+  const arqueosCalculados = useMemo(
+    () => arqueosConFilas(data),
+    [data.arqueos, data.ventas, data.gastos, data.movimientos, data.medios] // eslint-disable-line
+  );
 
   function crearArqueo() {
     const esPrimero = data.arqueos.length === 0;
@@ -3562,6 +3587,72 @@ function ConfigView({ data, update, esAsesora }) {
     localUpdate({ ...view, rubroTipo: { ...(view.rubroTipo || {}), [rubro]: tipo } });
   }
 
+  // Backup completo: junta todos los módulos del negocio en un solo Excel, una hoja por
+  // módulo, para que la asesora se lo baje y lo guarde donde quiera (no depende de Firestore).
+  function descargarBackupCompleto() {
+    const wb = XLSX.utils.book_new();
+    const hoja = (nombre, arr) => {
+      const datos = arr && arr.length ? arr : [{ Info: "Sin datos" }];
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(datos), nombre.slice(0, 31));
+    };
+
+    hoja("Ventas", data.ventas);
+    hoja("Gastos", data.gastos);
+    hoja("Movimientos de Caja", data.movimientos);
+    hoja("Movimientos de Stock", data.movStock);
+    hoja("Clientes", data.clientes);
+    hoja("Productos", data.productos.filter((p) => !esCombo(p)));
+    hoja(
+      "Combos",
+      data.productos.filter(esCombo).map((p) => ({
+        nombre: p.nombre,
+        codigo: p.codigo,
+        familia: p.familia,
+        precio: p.precioMinorista,
+        componentes: (p.componentes || [])
+          .map((c) => `${c.cantidad}× ${data.productos.find((x) => x.id === c.productoId)?.nombre || "?"}`)
+          .join(", "),
+      }))
+    );
+    hoja(
+      "Arqueos",
+      arqueosConFilas(data).flatMap((a) =>
+        a.mediosCaja.map((m) => ({
+          Desde: a.desde,
+          Hasta: a.hasta,
+          Medio: m,
+          "Saldo inicial": a.filas[m].inicial,
+          Ingresos: a.filas[m].ingresos,
+          Egresos: a.filas[m].egresos,
+          "Saldo final": a.filas[m].final,
+        }))
+      )
+    );
+    hoja("Familias", data.familias.map((f) => ({ Familia: f })));
+    hoja("Rubros", data.rubros.map((r) => ({ Rubro: r, Tipo: data.rubroTipo?.[r] || "" })));
+    hoja("Puntos de venta", (data.puntosVenta || []).map((p) => ({ "Punto de venta": p })));
+    hoja(
+      "Medios de pago",
+      data.medios.map((m) => ({
+        Medio: m,
+        "Días de acreditación": data.medioConfig?.[m]?.diasAcreditacion ?? "",
+        "Comisión %": data.medioConfig?.[m]?.comisionPct ?? "",
+      }))
+    );
+    hoja(
+      "Códigos de descuento",
+      (data.codigosDescuento || []).map((c) => ({
+        Código: c.codigo,
+        "Porcentaje": c.porcentaje,
+        Activo: c.activo ? "Sí" : "No",
+        Vencimiento: c.vencimiento || "",
+      }))
+    );
+
+    const slug = (data.nombreNegocio || "negocio").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+    XLSX.writeFile(wb, `backup_${slug}_${todayStr()}.xlsx`);
+  }
+
   return (
     <div className="flex flex-col gap-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -3582,6 +3673,22 @@ function ConfigView({ data, update, esAsesora }) {
           </div>
         )}
       </div>
+
+      {esAsesora && (
+        <Card style={{ padding: 18 }}>
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div>
+              <div style={{ fontWeight: 600 }}>Backup completo</div>
+              <p style={{ fontSize: 12.5, color: C.inkSoft, margin: "4px 0 0", maxWidth: 460 }}>
+                Descarga un Excel con todos los módulos de este negocio (Ventas, Gastos, Movimientos de caja y de stock,
+                Clientes, Productos, Combos, Arqueos y Configuración), cada uno en su propia hoja. Guardalo donde quieras
+                — no depende de Firestore ni de esta app.
+              </p>
+            </div>
+            <Button variant="ghost" onClick={descargarBackupCompleto}><Download size={15} /> Backup completo</Button>
+          </div>
+        </Card>
+      )}
 
       <Card style={{ padding: 18 }}>
         <div style={{ fontWeight: 600, marginBottom: 10 }}>Datos del negocio</div>
@@ -3878,6 +3985,7 @@ function FuenteGoogle() {
 function MarcaAgua() {
   return (
     <img
+      className="marca-agua"
       src={LOGO_CECILIA_B64}
       alt=""
       style={{
@@ -3967,6 +4075,12 @@ export function Negocio({ data, update, cabecera, esAsesora }) {
     setMenuAbierto(false); // en el celular, elegir una sección cierra el menú
   }
 
+  // Productos (no combos, que no tienen stock propio) por debajo de su stock mínimo.
+  // Se usa para el contador rojo junto a "Productos y Stock" en el menú.
+  const stockBajoCount = data.productos.filter(
+    (p) => !esCombo(p) && p.stockMinimo !== "" && p.stockMinimo != null && Number(p.stock) <= Number(p.stockMinimo)
+  ).length;
+
   const views = {
     dashboard: <Dashboard data={data} />,
     ventas: <VentasView data={data} update={update} esAsesora={esAsesora} />,
@@ -3984,7 +4098,7 @@ export function Negocio({ data, update, cabecera, esAsesora }) {
       <FuenteGoogle />
       <ErrorBanner />
       {menuAbierto && <div className="sidebar-backdrop" onClick={() => setMenuAbierto(false)} />}
-      <Sidebar tab={tab} setTab={irA} nombreNegocio={data.nombreNegocio} open={menuAbierto} onClose={() => setMenuAbierto(false)} />
+      <Sidebar tab={tab} setTab={irA} nombreNegocio={data.nombreNegocio} open={menuAbierto} onClose={() => setMenuAbierto(false)} stockBajoCount={stockBajoCount} />
       {/* zoom en vez de tocar cada fontSize a mano: achica letra+espaciados de los módulos
           de forma pareja en escritorio (en mobile, responsive.css lo desactiva). */}
       <div className="app-content" style={{ flex: 1, padding: 26, overflowX: "hidden", zoom: 0.92, minWidth: 0 }}>
