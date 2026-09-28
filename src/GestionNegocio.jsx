@@ -2986,6 +2986,7 @@ function ImportarView({ data, update }) {
             rows.forEach((row) => {
               const nombre = row["descripción"] || row["descripcion"];
               if (!nombre) return;
+              const codigo = pickByInclude(row, ["sku", "código", "codigo"]);
               const familia = row["familia"] ? String(row["familia"]).trim() : "General";
               if (FAMILIAS_EXCLUIDAS.includes(familia.toLowerCase())) return;
 
@@ -2999,6 +3000,7 @@ function ImportarView({ data, update }) {
               productosNuevos.push({
                 id: uid(),
                 nombre: String(nombre).trim(),
+                codigo: codigo ? String(codigo).trim() : "",
                 familia,
                 precioMinorista: huboListas ? Number(pMinorista) || 0 : precioUnico,
                 precioMayorista: huboListas ? Number(pMayorista) || 0 : precioUnico,
