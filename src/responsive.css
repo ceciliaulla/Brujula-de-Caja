@@ -184,7 +184,7 @@
   .sidebar-logo {
     display: block;
     position: absolute;
-    bottom: 60px;
+    bottom: 80px;   /* subido ~0,5 cm respecto de 60px */
     left: 8.6%;
     width: 66.7%;
     opacity: 0.55;
