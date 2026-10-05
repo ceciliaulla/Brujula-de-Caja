@@ -1204,17 +1204,11 @@ function VentasView({ data, update, esAsesora }) {
           <Field label="Cantidad">
             <TextInput type="number" min="1" value={item.cantidad} onChange={(e) => setItem({ ...item, cantidad: e.target.value })} style={{ width: 80 }} />
           </Field>
-          {esItemCombo ? (
-            <Field label="Lista de precio">
-              <div style={{ ...inputStyle, background: C.bg, color: C.inkSoft, display: "flex", alignItems: "center" }}>Combo (precio fijo)</div>
-            </Field>
-          ) : (
-            <Field label="Lista de precio">
-              <Select value={item.lista} onChange={(e) => setItem({ ...item, lista: e.target.value })}>
-                {listasActivas(data).map((k) => <option key={k} value={k}>{listaLabels[k] || LISTA_LABEL_DEFAULT[k]}</option>)}
-              </Select>
-            </Field>
-          )}
+          <Field label="Lista de precio">
+            <Select value={item.lista} onChange={(e) => setItem({ ...item, lista: e.target.value })}>
+              {listasActivas(data).map((k) => <option key={k} value={k}>{listaLabels[k] || LISTA_LABEL_DEFAULT[k]}</option>)}
+            </Select>
+          </Field>
           <Field label="Precio unitario">
             <MoneyField value={item.precioUnitario} onChange={(v) => setItem({ ...item, precioUnitario: v })} style={{ width: 110 }} placeholder="0" disabled={!!productoItem} />
           </Field>
