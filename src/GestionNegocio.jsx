@@ -988,11 +988,12 @@ function VentasView({ data, update, esAsesora }) {
   const [avisoPermiso, setAvisoPermiso] = useState(false);
 
   const [carrito, setCarrito] = useState([]);
-  const [item, setItem] = useState({ productoTexto: "", cantidad: 1, lista: LISTA_KEYS[0], precioUnitario: 0 });
+  const [item, setItem] = useState({ productoTexto: "", cantidad: 1, precioUnitario: 0 });
   const [orden, setOrden] = useState({
     fecha: todayStr(),
     puntoVenta: data.puntosVenta[0] || "",
     medioPago: data.medios[0] || "",
+    lista: LISTA_KEYS[0], // la lista de precio se elige una vez por venta, no por producto
     observaciones: "",
     descuentoManual: 0,
     codigoDescuentoId: "",
@@ -1017,10 +1018,10 @@ function VentasView({ data, update, esAsesora }) {
 
   useEffect(() => {
     if (productoItem) {
-      const campo = LISTA_CAMPO[item.lista];
+      const campo = LISTA_CAMPO[orden.lista];
       setItem((f) => ({ ...f, precioUnitario: productoItem[campo] || 0 }));
     }
-  }, [item.productoTexto, item.lista]); // eslint-disable-line
+  }, [item.productoTexto, orden.lista]); // eslint-disable-line
 
   function agregarItem() {
     if (!productoItem) return;
@@ -1050,8 +1051,8 @@ function VentasView({ data, update, esAsesora }) {
         productoNombre: productoItem.nombre,
         familia: productoItem.familia,
         cantidad,
-        lista: item.lista,
-        listaLabel: listaLabels[item.lista] || LISTA_LABEL_DEFAULT[item.lista],
+        lista: orden.lista,
+        listaLabel: listaLabels[orden.lista] || LISTA_LABEL_DEFAULT[orden.lista],
         precioUnitario,
         subtotal: cantidad * precioUnitario,
         esCombo: esItemCombo,
@@ -1187,6 +1188,23 @@ function VentasView({ data, update, esAsesora }) {
 
       <Card style={{ padding: 18 }}>
         <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 10 }}>1. Agregar productos</div>
+        <div className="flex flex-wrap gap-3 items-end" style={{ marginBottom: 14, paddingBottom: 14, borderBottom: `1px solid ${C.line}` }}>
+          <Field label="Lista de precio para esta venta">
+            <Select
+              value={orden.lista}
+              onChange={(e) => setOrden({ ...orden, lista: e.target.value })}
+              disabled={carrito.length > 0}
+              style={{ minWidth: 160 }}
+            >
+              {listasActivas(data).map((k) => <option key={k} value={k}>{listaLabels[k] || LISTA_LABEL_DEFAULT[k]}</option>)}
+            </Select>
+          </Field>
+          {carrito.length > 0 && (
+            <div style={{ fontSize: 12, color: C.inkFaint, paddingBottom: 8 }}>
+              Para cambiar de lista, vaciá primero el carrito — una venta usa una sola lista de precio.
+            </div>
+          )}
+        </div>
         <div className="flex flex-wrap gap-3 items-end">
           <Field label="Producto">
             <TextInput
@@ -1203,11 +1221,6 @@ function VentasView({ data, update, esAsesora }) {
           </Field>
           <Field label="Cantidad">
             <TextInput type="number" min="1" value={item.cantidad} onChange={(e) => setItem({ ...item, cantidad: e.target.value })} style={{ width: 80 }} />
-          </Field>
-          <Field label="Lista de precio">
-            <Select value={item.lista} onChange={(e) => setItem({ ...item, lista: e.target.value })}>
-              {listasActivas(data).map((k) => <option key={k} value={k}>{listaLabels[k] || LISTA_LABEL_DEFAULT[k]}</option>)}
-            </Select>
           </Field>
           <Field label="Precio unitario">
             <MoneyField value={item.precioUnitario} onChange={(v) => setItem({ ...item, precioUnitario: v })} style={{ width: 110 }} placeholder="0" disabled={!!productoItem} />
@@ -1248,7 +1261,7 @@ function VentasView({ data, update, esAsesora }) {
                       {it.esCombo && <span style={{ marginLeft: 6, fontSize: 11, color: C.gold, fontWeight: 600 }}>· Combo</span>}
                     </td>
                     <td data-label="Cant." style={{ padding: "6px 8px" }}>{it.cantidad}</td>
-                    <td data-label="Lista" style={{ padding: "6px 8px" }}>{it.esCombo ? "—" : it.listaLabel}</td>
+                    <td data-label="Lista" style={{ padding: "6px 8px" }}>{it.listaLabel}</td>
                     <td data-label="P. Unit." style={{ padding: "6px 8px", textAlign: "right" }}>{money(it.precioUnitario)}</td>
                     <td data-label="Subtotal" style={{ padding: "6px 8px", textAlign: "right", fontWeight: 600 }}>{money(it.subtotal)}</td>
                     <td data-label="" style={{ padding: "6px 8px" }}>
