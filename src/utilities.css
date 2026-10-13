@@ -26,3 +26,14 @@
 button, input, select, textarea {
   font-family: inherit;
 }
+
+/* ---------- "Tabla" responsiva armada con <div> (ver componentes Tbl/TblRow/TblCell) ----------
+   Escritorio: .tbl-responsive es una grilla; cada fila (.tbl-head-row / .tbl-row) es una caja
+   real que ocupa todas las columnas y usa "subgrid" para que sus celdas queden alineadas con
+   las de las demás filas (como una tabla), pudiendo llevar borde y fondo propios.
+   Celular: responsive.css pisa estas reglas y arma la vista de tarjetas. */
+.tbl-head-row, .tbl-row {
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
+}

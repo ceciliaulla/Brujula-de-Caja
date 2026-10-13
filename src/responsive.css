@@ -111,7 +111,7 @@
   }
   /* Los ícono-botones sueltos (tachos de basura, etc.) dentro de una fila de tabla
      ganan área de toque sin que se vean más grandes que antes. */
-  table.tbl-responsive td svg {
+  .tbl-cell svg {
     padding: 8px;
     box-sizing: content-box;
   }
@@ -121,59 +121,58 @@
     grid-template-columns: 1fr !important;
   }
 
-  /* ---- Tablas: se convierten en una lista de tarjetas, una por fila,
-     sin scroll horizontal. Requiere que cada <table> tenga la clase
-     "tbl-responsive" y cada <td> un atributo data-label="Columna". ---- */
-  table.tbl-responsive,
-  table.tbl-responsive tbody,
-  table.tbl-responsive tr {
-    display: block;
+  /* ---- "Tablas" (armadas con <div>, ver Tbl/TblRow/TblCell): en celular se
+     convierten en una lista de tarjetas, una por fila, sin scroll horizontal.
+     Se pisa el display:grid/subgrid de escritorio (utilities.css). ---- */
+  .tbl-responsive {
+    display: block !important;
     width: 100%;
   }
-  table.tbl-responsive thead {
-    display: none;
+  .tbl-head-row {
+    display: none !important;
   }
-  table.tbl-responsive tr {
+  .tbl-row {
+    display: block !important;
+    grid-column: auto;
+    width: 100%;
     margin-bottom: 10px;
-    border: 1px solid #DCD5E6;
+    border: 1px solid #DCD5E6 !important;
     border-radius: 10px;
     padding: 4px 10px;
     background: #fff;
+    box-sizing: border-box;
   }
-  table.tbl-responsive td {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: space-between;
-    align-items: center;
-    gap: 8px;
+  .tbl-cell {
+    display: block;
+    grid-column: auto !important;
+    max-width: none !important;
     padding: 7px 0 !important;
     border-top: 1px solid #EEEBF3 !important;
     text-align: right;
     width: 100%;
     box-sizing: border-box;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
-  table.tbl-responsive tr td:first-child {
+  .tbl-row .tbl-cell:first-child {
     border-top: none !important;
   }
-  table.tbl-responsive td[data-label]::before {
+  .tbl-cell[data-label]::before {
     content: attr(data-label);
+    display: block;
     font-weight: 600;
     color: #726C82;
     font-size: 12px;
     text-align: left;
-    flex-shrink: 0;
+    margin-bottom: 2px;
   }
-  /* Filas "especiales" (mensaje de tabla vacía, mini-formulario de carga de stock, etc.)
-     usan colSpan en el código: se muestran en bloque, tal cual, sin la etiqueta. */
-  table.tbl-responsive td[colspan] {
-    display: block !important;
+  /* Celdas "especiales" (mensaje de tabla vacía, mini-formulario de carga de stock, etc.)
+     no llevan data-label: se muestran en bloque, tal cual, sin etiqueta. */
+  .tbl-cell:not([data-label]) {
     text-align: left;
   }
-  table.tbl-responsive td[colspan]::before {
-    content: none !important;
-  }
-  table.tbl-responsive td input,
-  table.tbl-responsive td select {
+  .tbl-cell input,
+  .tbl-cell select {
     max-width: 60%;
   }
 

@@ -286,6 +286,37 @@ function Card({ children, style, ...rest }) {
     </div>
   );
 }
+/* ---------- "Tabla" responsiva armada con divs, no con <table> real ----------
+   Motivo: forzar display:block/flex sobre <table>/<tr>/<td> reales produce, en
+   algunos navegadores, un corte del texto largo contra el borde de la pantalla
+   en celular (el contenido no ajusta de línea aunque el CSS lo indique).
+   Con <div> + CSS Grid se evita de raíz: en escritorio actúan como una grilla con
+   columnas alineadas (como una tabla); en celular (ver responsive.css) cada fila
+   pasa a ser una tarjeta apilada. Los props se reenvían tal cual, así que
+   data-label, style, onClick, etc. funcionan igual que en un <td>. */
+function Tbl({ children, columns, style, ...rest }) {
+  return (
+    <div
+      className="tbl-responsive"
+      style={{ display: "grid", gridTemplateColumns: `repeat(${columns}, auto)`, ...style }}
+      {...rest}
+    >
+      {children}
+    </div>
+  );
+}
+function TblHeadRow({ children, ...rest }) {
+  return <div className="tbl-head-row" {...rest}>{children}</div>;
+}
+function TblTh({ children, ...rest }) {
+  return <div className="tbl-th" {...rest}>{children}</div>;
+}
+function TblRow({ children, ...rest }) {
+  return <div className="tbl-row" {...rest}>{children}</div>;
+}
+function TblCell({ children, ...rest }) {
+  return <div className="tbl-cell" {...rest}>{children}</div>;
+}
 function Field({ label, children }) {
   return (
     <label className="flex flex-col gap-1 text-sm" style={{ color: C.inkSoft }}>
@@ -1242,35 +1273,31 @@ function VentasView({ data, update, esAsesora }) {
 
         {carrito.length > 0 && (
           <div style={{ marginTop: 16 }}>
-            <table className="tbl-responsive" style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
-              <thead>
-                <tr style={{ color: C.inkSoft, textAlign: "left" }}>
-                  <th style={{ padding: "6px 8px" }}>Producto</th>
-                  <th style={{ padding: "6px 8px" }}>Cant.</th>
-                  <th style={{ padding: "6px 8px" }}>Lista</th>
-                  <th style={{ padding: "6px 8px", textAlign: "right" }}>P. Unit.</th>
-                  <th style={{ padding: "6px 8px", textAlign: "right" }}>Subtotal</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
+            <Tbl columns={6} style={{ fontSize: 13 }}>
+                <TblHeadRow style={{ color: C.inkSoft, textAlign: "left" }}>
+                  <TblTh style={{ padding: "6px 8px" }}>Producto</TblTh>
+                  <TblTh style={{ padding: "6px 8px" }}>Cant.</TblTh>
+                  <TblTh style={{ padding: "6px 8px" }}>Lista</TblTh>
+                  <TblTh style={{ padding: "6px 8px", textAlign: "right" }}>P. Unit.</TblTh>
+                  <TblTh style={{ padding: "6px 8px", textAlign: "right" }}>Subtotal</TblTh>
+                  <TblTh></TblTh>
+                </TblHeadRow>
                 {carrito.map((it) => (
-                  <tr key={it.tempId} style={{ borderTop: `1px solid ${C.line}` }}>
-                    <td data-label="Producto" style={{ padding: "6px 8px" }}>
+                  <TblRow key={it.tempId} style={{ borderTop: `1px solid ${C.line}` }}>
+                    <TblCell data-label="Producto" style={{ padding: "6px 8px" }}>
                       {it.productoNombre}
                       {it.esCombo && <span style={{ marginLeft: 6, fontSize: 11, color: C.gold, fontWeight: 600 }}>· Combo</span>}
-                    </td>
-                    <td data-label="Cant." style={{ padding: "6px 8px" }}>{it.cantidad}</td>
-                    <td data-label="Lista" style={{ padding: "6px 8px" }}>{it.listaLabel}</td>
-                    <td data-label="P. Unit." style={{ padding: "6px 8px", textAlign: "right" }}>{money(it.precioUnitario)}</td>
-                    <td data-label="Subtotal" style={{ padding: "6px 8px", textAlign: "right", fontWeight: 600 }}>{money(it.subtotal)}</td>
-                    <td data-label="" style={{ padding: "6px 8px" }}>
+                    </TblCell>
+                    <TblCell data-label="Cant." style={{ padding: "6px 8px" }}>{it.cantidad}</TblCell>
+                    <TblCell data-label="Lista" style={{ padding: "6px 8px" }}>{it.listaLabel}</TblCell>
+                    <TblCell data-label="P. Unit." style={{ padding: "6px 8px", textAlign: "right" }}>{money(it.precioUnitario)}</TblCell>
+                    <TblCell data-label="Subtotal" style={{ padding: "6px 8px", textAlign: "right", fontWeight: 600 }}>{money(it.subtotal)}</TblCell>
+                    <TblCell data-label="" style={{ padding: "6px 8px" }}>
                       <Trash2 size={14} style={{ cursor: "pointer", color: C.inkFaint }} onClick={() => quitarItem(it.tempId)} />
-                    </td>
-                  </tr>
+                    </TblCell>
+                  </TblRow>
                 ))}
-              </tbody>
-            </table>
+            </Tbl>
           </div>
         )}
       </Card>
@@ -1365,9 +1392,9 @@ function VentasView({ data, update, esAsesora }) {
             </div>
           </div>
           {localError && <div style={{ marginTop: 10, fontSize: 13, color: C.rust, fontWeight: 600 }}>{localError}</div>}
-          {justSaved && <div style={{ marginTop: 10, fontSize: 13, color: C.green, fontWeight: 600 }}>✓ Venta registrada</div>}
         </Card>
       )}
+      {justSaved && <div style={{ fontSize: 13, color: C.green, fontWeight: 600 }}>✓ Venta registrada</div>}
 
       <div>
         <Button variant="ghost" onClick={() => setVerHistorico(!verHistorico)}>
@@ -1377,32 +1404,29 @@ function VentasView({ data, update, esAsesora }) {
 
       {verHistorico && (
         <Card style={{ padding: 0, overflow: "hidden" }}>
-          <table className="tbl-responsive" style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
-            <thead>
-              <tr style={{ background: C.bg, textAlign: "left", color: C.inkSoft }}>
+          <Tbl columns={13} style={{ fontSize: 13 }}>
+              <TblHeadRow style={{ background: C.bg, textAlign: "left", color: C.inkSoft }}>
                 {["Fecha", "Producto", "Cant.", "Lista", "Bruto", "Desc.", "Total", "Punto de venta", "Medio", "Cobro", "Cliente", "Obs.", ""].map((h) => (
-                  <th key={h} style={{ padding: "10px 12px", fontWeight: 600 }}>{h}</th>
+                  <TblTh key={h} style={{ padding: "10px 12px", fontWeight: 600 }}>{h}</TblTh>
                 ))}
-              </tr>
-            </thead>
-            <tbody>
+              </TblHeadRow>
               {[...data.ventas].sort((a, b) => (a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : 0)).map((v) => (
-                <tr key={v.id} style={{ borderTop: `1px solid ${C.line}` }}>
-                  <td data-label="Fecha" style={{ padding: "8px 12px" }}>{v.fecha}</td>
-                  <td data-label="Producto" style={{ padding: "8px 12px" }}>
+                <TblRow key={v.id} style={{ borderTop: `1px solid ${C.line}` }}>
+                  <TblCell data-label="Fecha" style={{ padding: "8px 12px" }}>{v.fecha}</TblCell>
+                  <TblCell data-label="Producto" style={{ padding: "8px 12px" }}>
                     {v.productoNombre}
                     {v.comboNombre && (
                       <div style={{ fontSize: 11, color: C.inkFaint }}>parte del combo "{v.comboNombre}"</div>
                     )}
-                  </td>
-                  <td data-label="Cant." style={{ padding: "8px 12px" }}>{v.cantidad}</td>
-                  <td data-label="Lista" style={{ padding: "8px 12px" }}>{v.listaLabel || v.lista}</td>
-                  <td data-label="Bruto" style={{ padding: "8px 12px" }}>{money(v.totalBruto ?? v.total)}</td>
-                  <td data-label="Desc." style={{ padding: "8px 12px", color: C.rust }}>{v.descuentoMonto ? `-${money(v.descuentoMonto)}` : "—"}</td>
-                  <td data-label="Total" style={{ padding: "8px 12px", fontWeight: 600 }}>{money(v.total)}</td>
-                  <td data-label="Punto de venta" style={{ padding: "8px 12px" }}>{v.puntoVenta}</td>
-                  <td data-label="Medio" style={{ padding: "8px 12px" }}>{v.medioPago}</td>
-                  <td data-label="Cobro" style={{ padding: "8px 12px" }}>
+                  </TblCell>
+                  <TblCell data-label="Cant." style={{ padding: "8px 12px" }}>{v.cantidad}</TblCell>
+                  <TblCell data-label="Lista" style={{ padding: "8px 12px" }}>{v.listaLabel || v.lista}</TblCell>
+                  <TblCell data-label="Bruto" style={{ padding: "8px 12px" }}>{money(v.totalBruto ?? v.total)}</TblCell>
+                  <TblCell data-label="Desc." style={{ padding: "8px 12px", color: C.rust }}>{v.descuentoMonto ? `-${money(v.descuentoMonto)}` : "—"}</TblCell>
+                  <TblCell data-label="Total" style={{ padding: "8px 12px", fontWeight: 600 }}>{money(v.total)}</TblCell>
+                  <TblCell data-label="Punto de venta" style={{ padding: "8px 12px" }}>{v.puntoVenta}</TblCell>
+                  <TblCell data-label="Medio" style={{ padding: "8px 12px" }}>{v.medioPago}</TblCell>
+                  <TblCell data-label="Cobro" style={{ padding: "8px 12px" }}>
                     {v.medioPago === MEDIO_CTA_CTE ? (
                       <span style={{ color: C.inkFaint }}>Cta. Cte.</span>
                     ) : v.estadoCobro === "pendiente" && !v.confirmado ? (
@@ -1414,23 +1438,22 @@ function VentasView({ data, update, esAsesora }) {
                         Acreditado{v.comisionMonto ? ` (com. ${money(v.comisionMonto)})` : ""}
                       </span>
                     )}
-                  </td>
-                  <td data-label="Cliente" style={{ padding: "8px 12px" }}>{v.clienteNombre || "—"}</td>
-                  <td data-label="Obs." style={{ padding: "8px 12px", color: C.inkSoft, maxWidth: 160 }}>{v.observaciones}</td>
-                  <td data-label="" style={{ padding: "8px 12px" }}>
+                  </TblCell>
+                  <TblCell data-label="Cliente" style={{ padding: "8px 12px" }}>{v.clienteNombre || "—"}</TblCell>
+                  <TblCell data-label="Obs." style={{ padding: "8px 12px", color: C.inkSoft, maxWidth: 160 }}>{v.observaciones}</TblCell>
+                  <TblCell data-label="" style={{ padding: "8px 12px" }}>
                     <Trash2
                       size={15}
                       style={{ cursor: "pointer", color: C.inkFaint }}
                       onClick={() => (esAsesora ? setPendingDelete(v) : setAvisoPermiso(true))}
                     />
-                  </td>
-                </tr>
+                  </TblCell>
+                </TblRow>
               ))}
               {data.ventas.length === 0 && (
-                <tr><td colSpan={13} style={{ padding: 24, textAlign: "center", color: C.inkFaint }}>Todavía no cargaste ninguna venta.</td></tr>
+                <TblRow><TblCell style={{ gridColumn: "1 / -1", padding: 24, textAlign: "center", color: C.inkFaint }}>Todavía no cargaste ninguna venta.</TblCell></TblRow>
               )}
-            </tbody>
-          </table>
+          </Tbl>
         </Card>
       )}
       {pendingDelete && (
@@ -1532,37 +1555,33 @@ function GastosView({ data, update, esAsesora }) {
 
       {verHistorico && (
         <Card style={{ padding: 0, overflow: "hidden" }}>
-          <table className="tbl-responsive" style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
-            <thead>
-              <tr style={{ background: C.bg, textAlign: "left", color: C.inkSoft }}>
+          <Tbl columns={7} style={{ fontSize: 13 }}>
+              <TblHeadRow style={{ background: C.bg, textAlign: "left", color: C.inkSoft }}>
                 {["Fecha", "Rubro", "Detalle", "Monto", "Medio", "Obs.", ""].map((h) => (
-                  <th key={h} style={{ padding: "10px 12px", fontWeight: 600 }}>{h}</th>
+                  <TblTh key={h} style={{ padding: "10px 12px", fontWeight: 600 }}>{h}</TblTh>
                 ))}
-              </tr>
-            </thead>
-            <tbody>
+              </TblHeadRow>
               {gastosOrdenados.map((g) => (
-                <tr key={g.id} style={{ borderTop: `1px solid ${C.line}` }}>
-                  <td data-label="Fecha" style={{ padding: "8px 12px" }}>{g.fecha}</td>
-                  <td data-label="Rubro" style={{ padding: "8px 12px" }}>{g.rubro}</td>
-                  <td data-label="Detalle" style={{ padding: "8px 12px", color: C.inkSoft }}>{g.detalle}</td>
-                  <td data-label="Monto" style={{ padding: "8px 12px", fontWeight: 600 }}>{money(g.monto)}</td>
-                  <td data-label="Medio" style={{ padding: "8px 12px" }}>{g.medioPago}</td>
-                  <td data-label="Obs." style={{ padding: "8px 12px", color: C.inkSoft }}>{g.observaciones}</td>
-                  <td data-label="" style={{ padding: "8px 12px" }}>
+                <TblRow key={g.id} style={{ borderTop: `1px solid ${C.line}` }}>
+                  <TblCell data-label="Fecha" style={{ padding: "8px 12px" }}>{g.fecha}</TblCell>
+                  <TblCell data-label="Rubro" style={{ padding: "8px 12px" }}>{g.rubro}</TblCell>
+                  <TblCell data-label="Detalle" style={{ padding: "8px 12px", color: C.inkSoft }}>{g.detalle}</TblCell>
+                  <TblCell data-label="Monto" style={{ padding: "8px 12px", fontWeight: 600 }}>{money(g.monto)}</TblCell>
+                  <TblCell data-label="Medio" style={{ padding: "8px 12px" }}>{g.medioPago}</TblCell>
+                  <TblCell data-label="Obs." style={{ padding: "8px 12px", color: C.inkSoft }}>{g.observaciones}</TblCell>
+                  <TblCell data-label="" style={{ padding: "8px 12px" }}>
                     <Trash2
                       size={15}
                       style={{ cursor: "pointer", color: C.inkFaint }}
                       onClick={() => (esAsesora ? setPendingDelete(g) : setAvisoPermiso(true))}
                     />
-                  </td>
-                </tr>
+                  </TblCell>
+                </TblRow>
               ))}
               {gastosOrdenados.length === 0 && (
-                <tr><td colSpan={7} style={{ padding: 24, textAlign: "center", color: C.inkFaint }}>Todavía no cargaste ningún gasto.</td></tr>
+                <TblRow><TblCell style={{ gridColumn: "1 / -1", padding: 24, textAlign: "center", color: C.inkFaint }}>Todavía no cargaste ningún gasto.</TblCell></TblRow>
               )}
-            </tbody>
-          </table>
+          </Tbl>
         </Card>
       )}
       {pendingDelete && (
@@ -2018,15 +2037,12 @@ function ProductosView({ data, update }) {
             />
           ) : (
           <Card style={{ padding: 0, overflow: "visible" }}>
-            <table className="tbl-responsive" style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
-              <thead>
-                <tr style={{ background: C.bg, textAlign: "left", color: C.inkSoft }}>
+            <Tbl columns={6 + listasActivas(data).length} style={{ fontSize: 13 }}>
+                <TblHeadRow style={{ background: C.bg, textAlign: "left", color: C.inkSoft }}>
                   {["Producto", "Código", "Familia", ...listasActivas(data).map((k) => `P. ${data.listaLabels?.[k] || LISTA_LABEL_DEFAULT[k]}`), "Stock hoy", "Stock mín.", ""].map((h, i) => (
-                    <th key={`${h}-${i}`} style={{ padding: "10px 12px", fontWeight: 600 }}>{h}</th>
+                    <TblTh key={`${h}-${i}`} style={{ padding: "10px 12px", fontWeight: 600 }}>{h}</TblTh>
                   ))}
-                </tr>
-              </thead>
-              <tbody>
+                </TblHeadRow>
                 {productosNormales.map((p) => {
                   const bajo = p.stockMinimo !== "" && p.stockMinimo != null && Number(p.stock) <= Number(p.stockMinimo);
                   const camposPrecioActivos = listasActivas(data).map((k) => LISTA_CAMPO[k]);
@@ -2034,20 +2050,20 @@ function ProductosView({ data, update }) {
                   listasActivas(data).forEach((k) => { labelPorCampo[LISTA_CAMPO[k]] = `P. ${data.listaLabels?.[k] || LISTA_LABEL_DEFAULT[k]}`; });
                   return (
                     <React.Fragment key={p.id}>
-                      <tr style={{ borderTop: `1px solid ${C.line}` }}>
-                        <td data-label="Producto" style={{ padding: "8px 12px", fontWeight: 500 }}>{p.nombre}</td>
-                        <td data-label="Código" style={{ padding: "8px 12px", color: C.inkSoft }}>{p.codigo || "—"}</td>
-                        <td data-label="Familia" style={{ padding: "8px 12px" }}>{p.familia}</td>
+                      <TblRow style={{ borderTop: `1px solid ${C.line}` }}>
+                        <TblCell data-label="Producto" style={{ padding: "8px 12px", fontWeight: 500 }}>{p.nombre}</TblCell>
+                        <TblCell data-label="Código" style={{ padding: "8px 12px", color: C.inkSoft }}>{p.codigo || "—"}</TblCell>
+                        <TblCell data-label="Familia" style={{ padding: "8px 12px" }}>{p.familia}</TblCell>
                         {camposPrecioActivos.map((campo) => (
-                          <td key={campo} data-label={labelPorCampo[campo]} style={{ padding: "8px 12px" }}>{money(p[campo])}</td>
+                          <TblCell key={campo} data-label={labelPorCampo[campo]} style={{ padding: "8px 12px" }}>{money(p[campo])}</TblCell>
                         ))}
-                        <td data-label="Stock hoy" style={{ padding: "8px 12px", fontWeight: 600, color: bajo ? C.rust : C.ink }}>
+                        <TblCell data-label="Stock hoy" style={{ padding: "8px 12px", fontWeight: 600, color: bajo ? C.rust : C.ink }}>
                           {p.stock} {bajo && <AlertTriangle size={13} style={{ display: "inline", marginLeft: 4 }} />}
-                        </td>
-                        <td data-label="Stock mín." style={{ padding: "8px 12px", color: C.inkSoft }}>
+                        </TblCell>
+                        <TblCell data-label="Stock mín." style={{ padding: "8px 12px", color: C.inkSoft }}>
                           {p.stockMinimo !== "" && p.stockMinimo != null ? p.stockMinimo : "—"}
-                        </td>
-                        <td data-label="" style={{ padding: "8px 12px", whiteSpace: "nowrap" }}>
+                        </TblCell>
+                        <TblCell data-label="" style={{ padding: "8px 12px", whiteSpace: "nowrap" }}>
                           <Button variant="ghost" style={{ padding: "4px 8px", fontSize: 12 }} onClick={() => setDetalleId(p.id)}>
                             <Pencil size={13} /> Editar
                           </Button>
@@ -2055,11 +2071,11 @@ function ProductosView({ data, update }) {
                             <PackagePlus size={14} /> Stock
                           </Button>
                           <Trash2 size={15} style={{ cursor: "pointer", color: C.inkFaint, display: "inline", marginLeft: 10 }} onClick={() => setEliminarPendiente(p)} />
-                        </td>
-                      </tr>
+                        </TblCell>
+                      </TblRow>
                       {cargaStockId === p.id && (
-                        <tr style={{ background: C.greenSoft }}>
-                          <td colSpan={6 + listasActivas(data).length} style={{ padding: "10px 12px" }}>
+                        <TblRow style={{ background: C.greenSoft }}>
+                          <TblCell style={{ gridColumn: "1 / -1", padding: "10px 12px" }}>
                             <div className="flex gap-3 items-end flex-wrap">
                               <Field label="Fecha">
                                 <TextInput type="date" value={cargaForm.fecha} onChange={(e) => setCargaForm({ ...cargaForm, fecha: e.target.value })} />
@@ -2073,17 +2089,16 @@ function ProductosView({ data, update }) {
                               <Button onClick={() => confirmarCarga(p)}><Check size={14} /> Confirmar</Button>
                               <Button variant="ghost" onClick={() => setCargaStockId(null)}>Cancelar</Button>
                             </div>
-                          </td>
-                        </tr>
+                          </TblCell>
+                        </TblRow>
                       )}
                     </React.Fragment>
                   );
                 })}
                 {productosNormales.length === 0 && (
-                  <tr><td colSpan={6 + listasActivas(data).length} style={{ padding: 24, textAlign: "center", color: C.inkFaint }}>Todavía no cargaste ningún producto.</td></tr>
+                  <TblRow><TblCell style={{ gridColumn: "1 / -1", padding: 24, textAlign: "center", color: C.inkFaint }}>Todavía no cargaste ningún producto.</TblCell></TblRow>
                 )}
-              </tbody>
-            </table>
+            </Tbl>
           </Card>
           )}
         </>
@@ -2170,45 +2185,41 @@ function ProductosView({ data, update }) {
             />
           ) : (
           <Card style={{ padding: 0, overflow: "visible" }}>
-            <table className="tbl-responsive" style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
-              <thead>
-                <tr style={{ background: C.bg, textAlign: "left", color: C.inkSoft }}>
+            <Tbl columns={6 + listasActivas(data).length} style={{ fontSize: 13 }}>
+                <TblHeadRow style={{ background: C.bg, textAlign: "left", color: C.inkSoft }}>
                   {["Combo", "Código", "Familia", ...listasActivas(data).map((k) => `P. ${data.listaLabels?.[k] || LISTA_LABEL_DEFAULT[k]}`), "Incluye", "Stock disponible", ""].map((h, i) => (
-                    <th key={`${h}-${i}`} style={{ padding: "10px 12px", fontWeight: 600 }}>{h}</th>
+                    <TblTh key={`${h}-${i}`} style={{ padding: "10px 12px", fontWeight: 600 }}>{h}</TblTh>
                   ))}
-                </tr>
-              </thead>
-              <tbody>
+                </TblHeadRow>
                 {combos.map((p) => {
                   const disponible = stockDisponibleCombo(p, data.productos);
                   return (
-                    <tr key={p.id} style={{ borderTop: `1px solid ${C.line}` }}>
-                      <td data-label="Combo" style={{ padding: "8px 12px", fontWeight: 500 }}>{p.nombre}</td>
-                      <td data-label="Código" style={{ padding: "8px 12px", color: C.inkSoft }}>{p.codigo || "—"}</td>
-                      <td data-label="Familia" style={{ padding: "8px 12px" }}>{p.familia}</td>
+                    <TblRow key={p.id} style={{ borderTop: `1px solid ${C.line}` }}>
+                      <TblCell data-label="Combo" style={{ padding: "8px 12px", fontWeight: 500 }}>{p.nombre}</TblCell>
+                      <TblCell data-label="Código" style={{ padding: "8px 12px", color: C.inkSoft }}>{p.codigo || "—"}</TblCell>
+                      <TblCell data-label="Familia" style={{ padding: "8px 12px" }}>{p.familia}</TblCell>
                       {listasActivas(data).map((k) => (
-                        <td key={k} data-label={`P. ${data.listaLabels?.[k] || LISTA_LABEL_DEFAULT[k]}`} style={{ padding: "8px 12px" }}>{money(p[LISTA_CAMPO[k]])}</td>
+                        <TblCell key={k} data-label={`P. ${data.listaLabels?.[k] || LISTA_LABEL_DEFAULT[k]}`} style={{ padding: "8px 12px" }}>{money(p[LISTA_CAMPO[k]])}</TblCell>
                       ))}
-                      <td data-label="Incluye" style={{ padding: "8px 12px", color: C.inkSoft, fontSize: 12.5 }}>
+                      <TblCell data-label="Incluye" style={{ padding: "8px 12px", color: C.inkSoft, fontSize: 12.5 }}>
                         {(p.componentes || []).map((c) => `${c.cantidad}× ${componenteNombre(c.productoId)}`).join(", ")}
-                      </td>
-                      <td data-label="Stock disponible" style={{ padding: "8px 12px", fontWeight: 600, color: disponible === 0 ? C.rust : C.ink }}>
+                      </TblCell>
+                      <TblCell data-label="Stock disponible" style={{ padding: "8px 12px", fontWeight: 600, color: disponible === 0 ? C.rust : C.ink }}>
                         {disponible}
-                      </td>
-                      <td data-label="" style={{ padding: "8px 12px", whiteSpace: "nowrap" }}>
+                      </TblCell>
+                      <TblCell data-label="" style={{ padding: "8px 12px", whiteSpace: "nowrap" }}>
                         <Button variant="ghost" style={{ padding: "4px 8px", fontSize: 12 }} onClick={() => setDetalleId(p.id)}>
                           <Pencil size={13} /> Editar
                         </Button>
                         <Trash2 size={15} style={{ cursor: "pointer", color: C.inkFaint, display: "inline", marginLeft: 10 }} onClick={() => setEliminarPendiente(p)} />
-                      </td>
-                    </tr>
+                      </TblCell>
+                    </TblRow>
                   );
                 })}
                 {combos.length === 0 && (
-                  <tr><td colSpan={6 + listasActivas(data).length} style={{ padding: 24, textAlign: "center", color: C.inkFaint }}>Todavía no armaste ningún combo.</td></tr>
+                  <TblRow><TblCell style={{ gridColumn: "1 / -1", padding: 24, textAlign: "center", color: C.inkFaint }}>Todavía no armaste ningún combo.</TblCell></TblRow>
                 )}
-              </tbody>
-            </table>
+            </Tbl>
           </Card>
           )}
         </>
@@ -2878,36 +2889,32 @@ function ImportacionGenerica({ data, update }) {
           )}
           {resultado.nuevas.length > 0 && (
             <div style={{ maxHeight: 220, overflowY: "auto", marginBottom: 12 }}>
-              <table className="tbl-responsive" style={{ width: "100%", fontSize: 12.5, borderCollapse: "collapse" }}>
-                <thead>
-                  <tr style={{ textAlign: "left", color: C.inkSoft }}>
-                    <th style={{ padding: "4px 8px" }}>Fecha</th>
-                    <th style={{ padding: "4px 8px" }}>Orden</th>
-                    <th style={{ padding: "4px 8px" }}>Producto</th>
-                    <th style={{ padding: "4px 8px" }}>Cant.</th>
-                    <th style={{ padding: "4px 8px" }}>P. unitario</th>
-                    <th style={{ padding: "4px 8px" }}>Desc.</th>
-                    <th style={{ padding: "4px 8px" }}>Monto</th>
-                    <th style={{ padding: "4px 8px" }}>Medio</th>
-                    <th style={{ padding: "4px 8px" }}>Estado de cobro</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <Tbl columns={9} style={{ fontSize: 12.5 }}>
+                  <TblHeadRow style={{ textAlign: "left", color: C.inkSoft }}>
+                    <TblTh style={{ padding: "4px 8px" }}>Fecha</TblTh>
+                    <TblTh style={{ padding: "4px 8px" }}>Orden</TblTh>
+                    <TblTh style={{ padding: "4px 8px" }}>Producto</TblTh>
+                    <TblTh style={{ padding: "4px 8px" }}>Cant.</TblTh>
+                    <TblTh style={{ padding: "4px 8px" }}>P. unitario</TblTh>
+                    <TblTh style={{ padding: "4px 8px" }}>Desc.</TblTh>
+                    <TblTh style={{ padding: "4px 8px" }}>Monto</TblTh>
+                    <TblTh style={{ padding: "4px 8px" }}>Medio</TblTh>
+                    <TblTh style={{ padding: "4px 8px" }}>Estado de cobro</TblTh>
+                  </TblHeadRow>
                   {resultado.nuevas.slice(0, 30).map((v) => (
-                    <tr key={v.id} style={{ borderTop: `1px solid ${C.line}` }}>
-                      <td data-label="Fecha" style={{ padding: "4px 8px" }}>{v.fecha}</td>
-                      <td data-label="Orden" style={{ padding: "4px 8px" }}>{v.idExterno || "—"}</td>
-                      <td data-label="Producto" style={{ padding: "4px 8px" }}>{v.productoNombre}</td>
-                      <td data-label="Cant." style={{ padding: "4px 8px" }}>{v.cantidad}</td>
-                      <td data-label="P. unitario" style={{ padding: "4px 8px" }}>{money(v.precioUnitario)}</td>
-                      <td data-label="Desc." style={{ padding: "4px 8px" }}>{v.descuentoMonto ? money(v.descuentoMonto) : "—"}</td>
-                      <td data-label="Monto" style={{ padding: "4px 8px" }}>{money(v.total)}</td>
-                      <td data-label="Medio" style={{ padding: "4px 8px" }}>{v.medioPago}</td>
-                      <td data-label="Estado de cobro" style={{ padding: "4px 8px" }}>{v.estadoCobro || "acreditado"}</td>
-                    </tr>
+                    <TblRow key={v.id} style={{ borderTop: `1px solid ${C.line}` }}>
+                      <TblCell data-label="Fecha" style={{ padding: "4px 8px" }}>{v.fecha}</TblCell>
+                      <TblCell data-label="Orden" style={{ padding: "4px 8px" }}>{v.idExterno || "—"}</TblCell>
+                      <TblCell data-label="Producto" style={{ padding: "4px 8px" }}>{v.productoNombre}</TblCell>
+                      <TblCell data-label="Cant." style={{ padding: "4px 8px" }}>{v.cantidad}</TblCell>
+                      <TblCell data-label="P. unitario" style={{ padding: "4px 8px" }}>{money(v.precioUnitario)}</TblCell>
+                      <TblCell data-label="Desc." style={{ padding: "4px 8px" }}>{v.descuentoMonto ? money(v.descuentoMonto) : "—"}</TblCell>
+                      <TblCell data-label="Monto" style={{ padding: "4px 8px" }}>{money(v.total)}</TblCell>
+                      <TblCell data-label="Medio" style={{ padding: "4px 8px" }}>{v.medioPago}</TblCell>
+                      <TblCell data-label="Estado de cobro" style={{ padding: "4px 8px" }}>{v.estadoCobro || "acreditado"}</TblCell>
+                    </TblRow>
                   ))}
-                </tbody>
-              </table>
+              </Tbl>
               {resultado.nuevas.length > 30 && (
                 <div style={{ fontSize: 12, color: C.inkFaint, marginTop: 4 }}>...y {resultado.nuevas.length - 30} más.</div>
               )}
@@ -3368,35 +3375,31 @@ function MovimientosView({ data, update }) {
 
       {verHistorico && (
         <Card style={{ padding: 0, overflow: "hidden" }}>
-          <table className="tbl-responsive" style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
-            <thead>
-              <tr style={{ background: C.bg, textAlign: "left", color: C.inkSoft }}>
+          <Tbl columns={6} style={{ fontSize: 13 }}>
+              <TblHeadRow style={{ background: C.bg, textAlign: "left", color: C.inkSoft }}>
                 {["Fecha", "Tipo", "Detalle", "Monto", "Obs.", ""].map((h) => (
-                  <th key={h} style={{ padding: "10px 12px", fontWeight: 600 }}>{h}</th>
+                  <TblTh key={h} style={{ padding: "10px 12px", fontWeight: 600 }}>{h}</TblTh>
                 ))}
-              </tr>
-            </thead>
-            <tbody>
+              </TblHeadRow>
               {[...(data.movimientos || [])].sort((a, b) => (a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : 0)).map((m) => (
-                <tr key={m.id} style={{ borderTop: `1px solid ${C.line}` }}>
-                  <td data-label="Fecha" style={{ padding: "8px 12px" }}>{m.fecha}</td>
-                  <td data-label="Tipo" style={{ padding: "8px 12px" }}>{m.kind === "transferencia" ? "Transferencia" : m.motivoLabel}</td>
-                  <td data-label="Detalle" style={{ padding: "8px 12px", color: C.inkSoft }}>
+                <TblRow key={m.id} style={{ borderTop: `1px solid ${C.line}` }}>
+                  <TblCell data-label="Fecha" style={{ padding: "8px 12px" }}>{m.fecha}</TblCell>
+                  <TblCell data-label="Tipo" style={{ padding: "8px 12px" }}>{m.kind === "transferencia" ? "Transferencia" : m.motivoLabel}</TblCell>
+                  <TblCell data-label="Detalle" style={{ padding: "8px 12px", color: C.inkSoft }}>
                     {m.kind === "transferencia" ? `${m.medioOrigen} → ${m.medioDestino}` : m.medioPago}
                     {m.clienteNombre && <> · {m.clienteNombre}</>}
-                  </td>
-                  <td data-label="Monto" style={{ padding: "8px 12px", fontWeight: 600, color: m.tipo === "egreso" ? C.rust : C.green }}>{money(m.monto)}</td>
-                  <td data-label="Obs." style={{ padding: "8px 12px", color: C.inkSoft }}>{m.observaciones}</td>
-                  <td data-label="" style={{ padding: "8px 12px" }}>
+                  </TblCell>
+                  <TblCell data-label="Monto" style={{ padding: "8px 12px", fontWeight: 600, color: m.tipo === "egreso" ? C.rust : C.green }}>{money(m.monto)}</TblCell>
+                  <TblCell data-label="Obs." style={{ padding: "8px 12px", color: C.inkSoft }}>{m.observaciones}</TblCell>
+                  <TblCell data-label="" style={{ padding: "8px 12px" }}>
                     <Trash2 size={15} style={{ cursor: "pointer", color: C.inkFaint }} onClick={() => eliminar(m.id)} />
-                  </td>
-                </tr>
+                  </TblCell>
+                </TblRow>
               ))}
               {(data.movimientos || []).length === 0 && (
-                <tr><td colSpan={6} style={{ padding: 24, textAlign: "center", color: C.inkFaint }}>Todavía no cargaste ningún movimiento.</td></tr>
+                <TblRow><TblCell style={{ gridColumn: "1 / -1", padding: 24, textAlign: "center", color: C.inkFaint }}>Todavía no cargaste ningún movimiento.</TblCell></TblRow>
               )}
-            </tbody>
-          </table>
+          </Tbl>
         </Card>
       )}
     </div>
@@ -3576,34 +3579,30 @@ function ClientesView({ data, update }) {
       )}
 
       <Card style={{ padding: 0, overflow: "hidden" }}>
-        <table className="tbl-responsive" style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
-          <thead>
-            <tr style={{ background: C.bg, textAlign: "left", color: C.inkSoft }}>
+        <Tbl columns={8} style={{ fontSize: 13 }}>
+            <TblHeadRow style={{ background: C.bg, textAlign: "left", color: C.inkSoft }}>
               {["Cliente", "Teléfono", "Localidad", "Última compra", "Ticket promedio", "Frecuencia", "Saldo", ""].map((h) => (
-                <th key={h} style={{ padding: "10px 12px", fontWeight: 600 }}>{h}</th>
+                <TblTh key={h} style={{ padding: "10px 12px", fontWeight: 600 }}>{h}</TblTh>
               ))}
-            </tr>
-          </thead>
-          <tbody>
+            </TblHeadRow>
             {resumen.map((r) => (
-              <tr key={r.cliente.id} style={{ borderTop: `1px solid ${C.line}`, cursor: "pointer" }} onClick={() => setSeleccionado(r.cliente.id)}>
-                <td data-label="Cliente" style={{ padding: "8px 12px", fontWeight: 500 }}>{r.cliente.nombre}</td>
-                <td data-label="Teléfono" style={{ padding: "8px 12px", color: C.inkSoft }}>{r.cliente.telefono}</td>
-                <td data-label="Localidad" style={{ padding: "8px 12px", color: C.inkSoft }}>{r.cliente.localidad}</td>
-                <td data-label="Última compra" style={{ padding: "8px 12px" }}>{r.ultimaCompra || "—"}</td>
-                <td data-label="Ticket promedio" style={{ padding: "8px 12px" }}>{money(r.ticketPromedio)}</td>
-                <td data-label="Frecuencia" style={{ padding: "8px 12px" }}>{r.frecuenciaDias != null ? `cada ${r.frecuenciaDias.toFixed(0)} días` : "N/D"}</td>
-                <td data-label="Saldo" style={{ padding: "8px 12px", fontWeight: 600, color: r.saldo > 0 ? C.rust : C.green }}>{money(r.saldo)}</td>
-                <td data-label="" style={{ padding: "8px 12px" }} onClick={(e) => e.stopPropagation()}>
+              <TblRow key={r.cliente.id} style={{ borderTop: `1px solid ${C.line}`, cursor: "pointer" }} onClick={() => setSeleccionado(r.cliente.id)}>
+                <TblCell data-label="Cliente" style={{ padding: "8px 12px", fontWeight: 500 }}>{r.cliente.nombre}</TblCell>
+                <TblCell data-label="Teléfono" style={{ padding: "8px 12px", color: C.inkSoft }}>{r.cliente.telefono}</TblCell>
+                <TblCell data-label="Localidad" style={{ padding: "8px 12px", color: C.inkSoft }}>{r.cliente.localidad}</TblCell>
+                <TblCell data-label="Última compra" style={{ padding: "8px 12px" }}>{r.ultimaCompra || "—"}</TblCell>
+                <TblCell data-label="Ticket promedio" style={{ padding: "8px 12px" }}>{money(r.ticketPromedio)}</TblCell>
+                <TblCell data-label="Frecuencia" style={{ padding: "8px 12px" }}>{r.frecuenciaDias != null ? `cada ${r.frecuenciaDias.toFixed(0)} días` : "N/D"}</TblCell>
+                <TblCell data-label="Saldo" style={{ padding: "8px 12px", fontWeight: 600, color: r.saldo > 0 ? C.rust : C.green }}>{money(r.saldo)}</TblCell>
+                <TblCell data-label="" style={{ padding: "8px 12px" }} onClick={(e) => e.stopPropagation()}>
                   <Trash2 size={15} style={{ cursor: "pointer", color: C.inkFaint }} onClick={() => eliminar(r.cliente.id)} />
-                </td>
-              </tr>
+                </TblCell>
+              </TblRow>
             ))}
             {resumen.length === 0 && (
-              <tr><td colSpan={8} style={{ padding: 24, textAlign: "center", color: C.inkFaint }}>Todavía no cargaste ningún cliente.</td></tr>
+              <TblRow><TblCell style={{ gridColumn: "1 / -1", padding: 24, textAlign: "center", color: C.inkFaint }}>Todavía no cargaste ningún cliente.</TblCell></TblRow>
             )}
-          </tbody>
-        </table>
+        </Tbl>
       </Card>
     </div>
   );
@@ -3704,30 +3703,26 @@ function CobrosPendientes({ data, update }) {
         <div style={{ fontSize: 13, color: C.inkFaint }}>No hay ventas pendientes de cobro para este medio.</div>
       ) : (
         <>
-          <table className="tbl-responsive" style={{ width: "100%", fontSize: 13, borderCollapse: "collapse", marginBottom: 12 }}>
-            <thead>
-              <tr style={{ color: C.inkSoft, textAlign: "left" }}>
-                <th style={{ padding: "6px 8px" }}></th>
-                <th style={{ padding: "6px 8px" }}>Fecha</th>
-                <th style={{ padding: "6px 8px" }}>Producto</th>
-                <th style={{ padding: "6px 8px" }}>Fecha estimada</th>
-                <th style={{ padding: "6px 8px", textAlign: "right" }}>Monto vendido</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Tbl columns={5} style={{ fontSize: 13, marginBottom: 12 }}>
+              <TblHeadRow style={{ color: C.inkSoft, textAlign: "left" }}>
+                <TblTh style={{ padding: "6px 8px" }}></TblTh>
+                <TblTh style={{ padding: "6px 8px" }}>Fecha</TblTh>
+                <TblTh style={{ padding: "6px 8px" }}>Producto</TblTh>
+                <TblTh style={{ padding: "6px 8px" }}>Fecha estimada</TblTh>
+                <TblTh style={{ padding: "6px 8px", textAlign: "right" }}>Monto vendido</TblTh>
+              </TblHeadRow>
               {pendientes.map((v) => (
-                <tr key={v.id} style={{ borderTop: `1px solid ${C.line}` }}>
-                  <td data-label="Incluir" style={{ padding: "6px 8px" }}>
+                <TblRow key={v.id} style={{ borderTop: `1px solid ${C.line}` }}>
+                  <TblCell data-label="Incluir" style={{ padding: "6px 8px" }}>
                     <input type="checkbox" checked={!!seleccion[v.id]} onChange={() => toggle(v.id)} />
-                  </td>
-                  <td data-label="Fecha" style={{ padding: "6px 8px" }}>{v.fecha}</td>
-                  <td data-label="Producto" style={{ padding: "6px 8px" }}>{v.productoNombre}</td>
-                  <td data-label="Fecha estimada" style={{ padding: "6px 8px", color: C.inkSoft }}>{v.fechaEstimadaAcreditacion}</td>
-                  <td data-label="Monto vendido" style={{ padding: "6px 8px", textAlign: "right" }}>{money(v.total)}</td>
-                </tr>
+                  </TblCell>
+                  <TblCell data-label="Fecha" style={{ padding: "6px 8px" }}>{v.fecha}</TblCell>
+                  <TblCell data-label="Producto" style={{ padding: "6px 8px" }}>{v.productoNombre}</TblCell>
+                  <TblCell data-label="Fecha estimada" style={{ padding: "6px 8px", color: C.inkSoft }}>{v.fechaEstimadaAcreditacion}</TblCell>
+                  <TblCell data-label="Monto vendido" style={{ padding: "6px 8px", textAlign: "right" }}>{money(v.total)}</TblCell>
+                </TblRow>
               ))}
-            </tbody>
-          </table>
+          </Tbl>
 
           <div className="flex flex-wrap gap-3 items-end">
             <div style={{ fontSize: 13.5 }}>
@@ -3826,28 +3821,24 @@ function ArqueoView({ data, update }) {
                 <Trash2 size={15} style={{ cursor: "pointer", color: C.inkFaint }} onClick={() => eliminarArqueo(a.id)} />
               </div>
             </div>
-            <table className="tbl-responsive" style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
-              <thead>
-                <tr style={{ color: C.inkSoft, textAlign: "left" }}>
-                  <th style={{ padding: "6px 8px" }}>Medio de pago</th>
-                  <th style={{ padding: "6px 8px", textAlign: "right" }}>Saldo inicial</th>
-                  <th style={{ padding: "6px 8px", textAlign: "right" }}>Ingresos</th>
-                  <th style={{ padding: "6px 8px", textAlign: "right" }}>Egresos</th>
-                  <th style={{ padding: "6px 8px", textAlign: "right" }}>Saldo final</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Tbl columns={5} style={{ fontSize: 13 }}>
+                <TblHeadRow style={{ color: C.inkSoft, textAlign: "left" }}>
+                  <TblTh style={{ padding: "6px 8px" }}>Medio de pago</TblTh>
+                  <TblTh style={{ padding: "6px 8px", textAlign: "right" }}>Saldo inicial</TblTh>
+                  <TblTh style={{ padding: "6px 8px", textAlign: "right" }}>Ingresos</TblTh>
+                  <TblTh style={{ padding: "6px 8px", textAlign: "right" }}>Egresos</TblTh>
+                  <TblTh style={{ padding: "6px 8px", textAlign: "right" }}>Saldo final</TblTh>
+                </TblHeadRow>
                 {mediosCaja.map((m) => (
-                  <tr key={m} style={{ borderTop: `1px solid ${C.line}` }}>
-                    <td data-label="Medio de pago" style={{ padding: "6px 8px" }}>{m}</td>
-                    <td data-label="Saldo inicial" style={{ padding: "6px 8px", textAlign: "right" }}>{money(a.filas[m].inicial)}</td>
-                    <td data-label="Ingresos" style={{ padding: "6px 8px", textAlign: "right", color: C.green }}>{money(a.filas[m].ingresos)}</td>
-                    <td data-label="Egresos" style={{ padding: "6px 8px", textAlign: "right", color: C.rust }}>{money(a.filas[m].egresos)}</td>
-                    <td data-label="Saldo final" style={{ padding: "6px 8px", textAlign: "right", fontWeight: 600 }}>{money(a.filas[m].final)}</td>
-                  </tr>
+                  <TblRow key={m} style={{ borderTop: `1px solid ${C.line}` }}>
+                    <TblCell data-label="Medio de pago" style={{ padding: "6px 8px" }}>{m}</TblCell>
+                    <TblCell data-label="Saldo inicial" style={{ padding: "6px 8px", textAlign: "right" }}>{money(a.filas[m].inicial)}</TblCell>
+                    <TblCell data-label="Ingresos" style={{ padding: "6px 8px", textAlign: "right", color: C.green }}>{money(a.filas[m].ingresos)}</TblCell>
+                    <TblCell data-label="Egresos" style={{ padding: "6px 8px", textAlign: "right", color: C.rust }}>{money(a.filas[m].egresos)}</TblCell>
+                    <TblCell data-label="Saldo final" style={{ padding: "6px 8px", textAlign: "right", fontWeight: 600 }}>{money(a.filas[m].final)}</TblCell>
+                  </TblRow>
                 ))}
-              </tbody>
-            </table>
+            </Tbl>
           </Card>
         );
       })}
