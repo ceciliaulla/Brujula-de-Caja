@@ -151,6 +151,24 @@ function estaAcreditadaVenta(v) {
   if (!v.estadoCobro || v.estadoCobro === "acreditado") return true;
   return v.fechaEstimadaAcreditacion ? v.fechaEstimadaAcreditacion <= todayStr() : false;
 }
+// ---------- Cheques / medios con "fecha propia" ----------
+// Un medio con fechaPropia (ej. "Cheque") no usa días fijos de acreditación: cada venta o gasto
+// trae su propio vencimiento (número de cheque, banco y fecha de vto).
+function medioFechaPropia(data, medio) {
+  return !!((data.medioConfig || {})[medio] || {}).fechaPropia;
+}
+// Un gasto pagado con cheque propio recién sale de la caja al llegar el vencimiento.
+function gastoDebitado(g) {
+  return !g.fechaVtoCheque || g.fechaVtoCheque <= todayStr();
+}
+function textoCheque(x) {
+  if (!x.fechaVtoCheque) return "";
+  const partes = [];
+  if (x.chequeNumero) partes.push(`N° ${x.chequeNumero}`);
+  if (x.chequeBanco) partes.push(x.chequeBanco);
+  partes.push(`vto ${x.fechaVtoCheque}`);
+  return `Cheque ${partes.join(" · ")}`;
+}
 // ---------- Arqueo (lógica compartida entre ArqueoView y el backup completo) ----------
 function calcularFilaArqueo(data, mediosCaja, desde, hasta, saldoInicial) {
   const filtrar = (arr) => arr.filter((it) => it.fecha >= desde && it.fecha <= hasta);
@@ -158,7 +176,7 @@ function calcularFilaArqueo(data, mediosCaja, desde, hasta, saldoInicial) {
   const filas = {};
   mediosCaja.forEach((medio) => {
     let ingresos = filtrar(data.ventas).filter((v) => v.medioPago === medio && estaAcreditadaVenta(v)).reduce((a, v) => a + v.total, 0);
-    let egresos = filtrar(data.gastos).filter((g) => g.medioPago === medio).reduce((a, g) => a + Number(g.monto), 0);
+    let egresos = filtrar(data.gastos).filter((g) => g.medioPago === medio && gastoDebitado(g)).reduce((a, g) => a + Number(g.monto), 0);
     movs.forEach((m) => {
       if (m.kind === "transferencia") {
         if (m.medioOrigen === medio) egresos += Number(m.monto);
@@ -660,15 +678,94 @@ function Dashboard({ data }) {
   const ticketPromedio = periodo.ventas.length ? totalVentas / periodo.ventas.length : 0;
   const totalGastos = periodo.gastos.reduce((a, g) => a + Number(g.monto), 0);
   const gastosPctIngresos = totalVentas ? (totalGastos / totalVentas) * 100 : 0;
-  const porCobrar = data.ventas
-    .filter((v) => v.medioPago !== MEDIO_CTA_CTE && v.estadoCobro === "pendiente" && !v.confirmado)
-    .reduce((a, v) => a + v.total, 0);
+  // ---- A cobrar / A pagar: foto de HOY (no depende del período elegido arriba) ----
+  const { aCobrar, aPagar } = useMemo(() => {
+    const hoy = todayStr();
+    const en30 = sumarDias(hoy, 30);
+    const vacio = () => ({ vencido: 0, prox30: 0, despues: 0, sinFecha: 0, total: 0 });
+    const poner = (fila, fecha, monto) => {
+      const k = !fecha ? "sinFecha" : fecha <= hoy ? "vencido" : fecha <= en30 ? "prox30" : "despues";
+      fila[k] += monto;
+      fila.total += monto;
+    };
+    const tarjetas = vacio(), cheques = vacio(), ctacte = vacio(), pagar = vacio();
+    data.ventas.forEach((v) => {
+      if (v.medioPago === MEDIO_CTA_CTE || v.estadoCobro !== "pendiente" || v.confirmado) return;
+      poner(v.fechaVtoCheque ? cheques : tarjetas, v.fechaEstimadaAcreditacion, v.total);
+    });
+    (data.clientes || []).forEach((c) => {
+      const saldo = statsCliente(data, c.id).saldo;
+      if (saldo > 0) poner(ctacte, null, saldo);
+    });
+    data.gastos.forEach((g) => {
+      if (!gastoDebitado(g)) poner(pagar, g.fechaVtoCheque, Number(g.monto));
+    });
+    const total = vacio();
+    [tarjetas, cheques, ctacte].forEach((f) => Object.keys(total).forEach((k) => (total[k] += f[k])));
+    return { aCobrar: { tarjetas, cheques, ctacte, total }, aPagar: pagar };
+  }, [data]);
+
+  // ---- Flujo de fondos mensual (histórico): por la fecha en que el dinero realmente entró o salió ----
+  const flujoMensual = useMemo(() => {
+    const hoy = todayStr();
+    const meses = {};
+    const sumar = (fecha, campo, monto) => {
+      if (!fecha || fecha > hoy) return; // solo lo que ya ocurrió
+      const k = monthKey(fecha);
+      if (!meses[k]) meses[k] = { ventas: 0, ctacte: 0, ajustes: 0, gastos: 0, inversion: 0, financiamiento: 0 };
+      meses[k][campo] += monto;
+    };
+    data.ventas.forEach((v) => {
+      if (v.medioPago === MEDIO_CTA_CTE) return; // la cuenta corriente entra cuando se cobra (Movimientos)
+      const f = v.confirmado
+        ? v.fechaAcreditacionReal || v.fecha
+        : v.estadoCobro === "pendiente"
+        ? v.fechaEstimadaAcreditacion || v.fecha
+        : v.fecha;
+      sumar(f, "ventas", v.total);
+    });
+    data.gastos.forEach((g) => sumar(g.fechaVtoCheque || g.fecha, "gastos", Number(g.monto)));
+    (data.movimientos || []).forEach((m) => {
+      if (m.kind === "transferencia") return; // movimiento entre medios propios: neutro
+      const monto = m.tipo === "ingreso" ? Number(m.monto) : -Number(m.monto);
+      const campo = m.motivoId === "cobro_cta_cte" ? "ctacte" : m.flujo === "inversion" ? "inversion" : m.flujo === "financiamiento" ? "financiamiento" : "ajustes";
+      sumar(m.fecha, campo, monto);
+    });
+    const keys = Object.keys(meses).sort();
+    if (keys.length === 0) return [];
+    const filas = [];
+    let [y, mo] = keys[0].split("-").map(Number);
+    const [yFin, moFin] = hoy.slice(0, 7).split("-").map(Number);
+    let acumulado = 0;
+    while (y < yFin || (y === yFin && mo <= moFin)) {
+      const key = `${y}-${String(mo).padStart(2, "0")}`;
+      const r = meses[key] || { ventas: 0, ctacte: 0, ajustes: 0, gastos: 0, inversion: 0, financiamiento: 0 };
+      const neto = r.ventas + r.ctacte + r.ajustes - r.gastos + r.inversion + r.financiamiento;
+      acumulado += neto;
+      filas.push({ key, ...r, neto, acumulado });
+      mo += 1;
+      if (mo > 12) { mo = 1; y += 1; }
+    }
+    return filas;
+  }, [data]);
+
+  function descargarFlujoMensual() {
+    const wb = XLSX.utils.book_new();
+    const filas = [
+      ["Mes", "Ventas cobradas", "Cobros de cuenta corriente", "Ajustes", "Gastos pagados", "Inversión", "Financiamiento", "Flujo neto", "Saldo acumulado"],
+      ...flujoMensual.map((f) => [monthLabel(f.key), f.ventas, f.ctacte, f.ajustes, f.gastos ? -f.gastos : 0, f.inversion, f.financiamiento, f.neto, f.acumulado]),
+    ];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(filas), "Flujo de fondos mensual");
+    XLSX.writeFile(wb, `Flujo de fondos mensual - ${data.nombreNegocio || "negocio"}.xlsx`);
+  }
   const totalNoAcreditadoPeriodo = periodo.ventas
     .filter((v) => v.medioPago !== MEDIO_CTA_CTE && v.estadoCobro === "pendiente" && !v.confirmado)
     .reduce((a, v) => a + v.total, 0);
   const totalComisionesPeriodo = periodo.ventas.reduce((a, v) => a + (v.comisionMonto || 0), 0);
 
-  const flujoOperativo = totalVentas - totalNoAcreditadoPeriodo - totalComisionesPeriodo - totalGastos;
+  // un gasto pagado con cheque propio que todavía no venció no salió de la caja
+  const gastosChequePendientesPeriodo = periodo.gastos.filter((g) => !gastoDebitado(g)).reduce((a, g) => a + Number(g.monto), 0);
+  const flujoOperativo = totalVentas - totalNoAcreditadoPeriodo - totalComisionesPeriodo - (totalGastos - gastosChequePendientesPeriodo);
   const flujoInversion = periodo.movimientos
     .filter((m) => m.flujo === "inversion")
     .reduce((a, m) => a + (m.tipo === "ingreso" ? m.monto : -m.monto), 0);
@@ -838,7 +935,7 @@ function Dashboard({ data }) {
 
       <div className="flex gap-4 flex-wrap">
         <KPI label="Ventas del período" value={money(totalVentas)} accent={C.green} delta={comparacion && deltaInfo(comparacion.ventas, false)} />
-        <KPI label="Por cobrar" value={money(porCobrar)} accent={C.gold} />
+        <KPI label="A cobrar (total)" value={money(aCobrar.total.total)} accent={C.gold} />
         <KPI label="Ticket promedio" value={money(ticketPromedio)} accent={C.green} />
       </div>
       <div className="flex gap-4 flex-wrap">
@@ -846,6 +943,46 @@ function Dashboard({ data }) {
         <KPI label="Gastos sobre ingresos" value={pct(gastosPctIngresos)} accent={C.gold} />
         <KPI label="Punto de equilibrio (aprox.)" value={puntoEquilibrio != null ? money(puntoEquilibrio) : "N/D"} accent={C.ink} />
       </div>
+
+      {(aCobrar.total.total > 0 || aPagar.total > 0) && (
+        <Card style={{ padding: 18 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>A cobrar y a pagar (a hoy)</div>
+          <div style={{ fontSize: 12, color: C.inkSoft, marginBottom: 12 }}>
+            Es una foto de hoy: no depende del período elegido arriba. "Vencido sin conciliar" son cobros cuya fecha ya pasó pero que todavía no confirmaste en Arqueo → Cobros pendientes.
+          </div>
+          <div style={{ border: `1px solid ${C.line}`, borderRadius: 10, overflow: "hidden" }}>
+            <Tbl columns={6} style={{ fontSize: 13 }}>
+              <TblHeadRow style={{ background: C.bg, textAlign: "left", color: C.inkSoft }}>
+                {["", "Vencido sin conciliar", "Próx. 30 días", "Más adelante", "Sin fecha", "Total"].map((h, i) => (
+                  <TblTh key={i} style={{ padding: "10px 12px", fontWeight: 600 }}>{h}</TblTh>
+                ))}
+              </TblHeadRow>
+              {[
+                ["Tarjetas y pasarelas", aCobrar.tarjetas, false],
+                ["Cheques en cartera", aCobrar.cheques, false],
+                ["Cuenta corriente de clientes", aCobrar.ctacte, false],
+                ["Total a cobrar", aCobrar.total, true],
+                ["Cheques emitidos (a pagar)", aPagar, false],
+              ]
+                .filter(([label, f, destacada]) => destacada || f.total > 0)
+                .map(([label, f, destacada]) => {
+                  const cel = (n) => (n ? money(n) : "—");
+                  const st = { padding: "8px 12px", fontWeight: destacada ? 700 : 400 };
+                  return (
+                    <TblRow key={label} style={{ borderTop: `1px solid ${C.line}` }}>
+                      <TblCell data-label="Concepto" style={{ ...st, fontWeight: destacada ? 700 : 500 }}>{label}</TblCell>
+                      <TblCell data-label="Vencido sin conciliar" style={st}>{cel(f.vencido)}</TblCell>
+                      <TblCell data-label="Próx. 30 días" style={st}>{cel(f.prox30)}</TblCell>
+                      <TblCell data-label="Más adelante" style={st}>{cel(f.despues)}</TblCell>
+                      <TblCell data-label="Sin fecha" style={st}>{cel(f.sinFecha)}</TblCell>
+                      <TblCell data-label="Total" style={{ ...st, fontWeight: 700 }}>{money(f.total)}</TblCell>
+                    </TblRow>
+                  );
+                })}
+            </Tbl>
+          </div>
+        </Card>
+      )}
 
       <Card style={{ padding: 18 }}>
         <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Ingresos por ventas</div>
@@ -870,6 +1007,43 @@ function Dashboard({ data }) {
           {puntoEquilibrio != null && <> · Margen de contribución estimado: {pct(margenContribucionPct)}</>}
         </div>
       </Card>
+
+      <AccordionItem title="Flujo de fondos mensual (histórico)">
+        {flujoMensual.length === 0 ? (
+          <div style={{ fontSize: 13, color: C.inkFaint }}>Todavía no hay movimientos para armar el flujo mensual.</div>
+        ) : (
+          <>
+            <div style={{ fontSize: 12, color: C.inkSoft, marginBottom: 10 }}>
+              Mes a mes, según la fecha en que el dinero realmente entró o salió: las ventas por su fecha de cobro (la real si ya la conciliaste, la estimada si no; los cheques, por su vencimiento) y los gastos por su fecha de pago (los cheques propios, por su vencimiento). No incluye lo que está por cobrar o pagar a futuro. Las transferencias entre medios no se cuentan. El saldo acumulado parte de cero en el primer mes con datos.
+            </div>
+            <div style={{ marginBottom: 12 }}>
+              <Button variant="ghost" onClick={descargarFlujoMensual}><Download size={15} /> Descargar Excel</Button>
+            </div>
+            <div style={{ border: `1px solid ${C.line}`, borderRadius: 10, overflow: "hidden" }}>
+              <Tbl columns={9} style={{ fontSize: 13 }}>
+                <TblHeadRow style={{ background: C.bg, textAlign: "left", color: C.inkSoft }}>
+                  {["Mes", "Ventas cobradas", "Cobros cta. cte.", "Ajustes", "Gastos pagados", "Inversión", "Financiamiento", "Flujo neto", "Saldo acumulado"].map((h) => (
+                    <TblTh key={h} style={{ padding: "10px 12px", fontWeight: 600 }}>{h}</TblTh>
+                  ))}
+                </TblHeadRow>
+                {flujoMensual.map((f) => (
+                  <TblRow key={f.key} style={{ borderTop: `1px solid ${C.line}` }}>
+                    <TblCell data-label="Mes" style={{ padding: "8px 12px", fontWeight: 500 }}>{monthLabel(f.key)}</TblCell>
+                    <TblCell data-label="Ventas cobradas" style={{ padding: "8px 12px" }}>{money(f.ventas)}</TblCell>
+                    <TblCell data-label="Cobros cta. cte." style={{ padding: "8px 12px" }}>{money(f.ctacte)}</TblCell>
+                    <TblCell data-label="Ajustes" style={{ padding: "8px 12px" }}>{money(f.ajustes)}</TblCell>
+                    <TblCell data-label="Gastos pagados" style={{ padding: "8px 12px", color: C.rust }}>{money(f.gastos ? -f.gastos : 0)}</TblCell>
+                    <TblCell data-label="Inversión" style={{ padding: "8px 12px" }}>{money(f.inversion)}</TblCell>
+                    <TblCell data-label="Financiamiento" style={{ padding: "8px 12px" }}>{money(f.financiamiento)}</TblCell>
+                    <TblCell data-label="Flujo neto" style={{ padding: "8px 12px", fontWeight: 600, color: f.neto >= 0 ? C.green : C.rust }}>{money(f.neto)}</TblCell>
+                    <TblCell data-label="Saldo acumulado" style={{ padding: "8px 12px", fontWeight: 600 }}>{money(f.acumulado)}</TblCell>
+                  </TblRow>
+                ))}
+              </Tbl>
+            </div>
+          </>
+        )}
+      </AccordionItem>
 
       <Card style={{ padding: 18 }}>
         <div className="flex items-center justify-between flex-wrap gap-2" style={{ marginBottom: 4 }}>
@@ -1025,6 +1199,9 @@ function VentasView({ data, update, esAsesora }) {
     puntoVenta: data.puntosVenta[0] || "",
     medioPago: data.medios[0] || "",
     lista: LISTA_KEYS[0], // la lista de precio se elige una vez por venta, no por producto
+    chequeNumero: "",
+    chequeBanco: "",
+    chequeVto: "",
     observaciones: "",
     descuentoManual: 0,
     codigoDescuentoId: "",
@@ -1044,6 +1221,7 @@ function VentasView({ data, update, esAsesora }) {
   const stockMaxCombo = esItemCombo ? stockDisponibleCombo(productoItem, data.productos) : null;
   const combosInsuficientes = esItemCombo && Number(item.cantidad) > stockMaxCombo;
   const esCtaCte = orden.medioPago === MEDIO_CTA_CTE;
+  const esCheque = !esCtaCte && medioFechaPropia(data, orden.medioPago);
   const codigoSeleccionado = codigosActivos.find((c) => c.id === orden.codigoDescuentoId);
   const descuentoPct = (Number(orden.descuentoManual) || 0) + (codigoSeleccionado ? Number(codigoSeleccionado.porcentaje) || 0 : 0);
 
@@ -1106,13 +1284,15 @@ function VentasView({ data, update, esAsesora }) {
     try {
       if (carrito.length === 0) { setLocalError("Agregá al menos un producto antes de registrar."); return; }
       if (esCtaCte && !orden.clienteId) { setLocalError("Elegí un cliente para una venta a Cuenta Corriente."); return; }
+      if (esCheque && !orden.chequeVto) { setLocalError("Indicá la fecha de vencimiento del cheque."); return; }
       const ventaId = uid();
       const cliente = esCtaCte ? (data.clientes || []).find((c) => c.id === orden.clienteId) : null;
       const config = (data.medioConfig || {})[orden.medioPago] || {};
-      const diasAcreditacion = esCtaCte ? null : Number(config.diasAcreditacion) || 0;
-      const comisionPctEstimada = esCtaCte ? 0 : Number(config.comisionPct) || 0;
-      const fechaEstimadaAcreditacion = esCtaCte ? null : sumarDias(orden.fecha, diasAcreditacion);
-      const estadoCobro = esCtaCte ? undefined : diasAcreditacion > 0 ? "pendiente" : "acreditado";
+      // Cheque: no hay días fijos; se cobra en la fecha de vencimiento de ese cheque.
+      const diasAcreditacion = esCtaCte || esCheque ? null : Number(config.diasAcreditacion) || 0;
+      const comisionPctEstimada = esCtaCte || esCheque ? 0 : Number(config.comisionPct) || 0;
+      const fechaEstimadaAcreditacion = esCtaCte ? null : esCheque ? orden.chequeVto : sumarDias(orden.fecha, diasAcreditacion);
+      const estadoCobro = esCtaCte ? undefined : esCheque ? "pendiente" : diasAcreditacion > 0 ? "pendiente" : "acreditado";
 
       const nuevasVentas = [];
       carrito.forEach((it) => {
@@ -1133,6 +1313,9 @@ function VentasView({ data, update, esAsesora }) {
           fechaEstimadaAcreditacion,
           estadoCobro,
           confirmado: false,
+          chequeNumero: esCheque ? orden.chequeNumero : undefined,
+          chequeBanco: esCheque ? orden.chequeBanco : undefined,
+          fechaVtoCheque: esCheque ? orden.chequeVto : undefined,
         };
         if (!it.esCombo) {
           nuevasVentas.push({
@@ -1194,7 +1377,7 @@ function VentasView({ data, update, esAsesora }) {
 
       update({ ...data, ventas: [...nuevasVentas, ...data.ventas], productos, movStock });
       setCarrito([]);
-      setOrden((f) => ({ ...f, observaciones: "", descuentoManual: 0, codigoDescuentoId: "", clienteId: "" }));
+      setOrden((f) => ({ ...f, observaciones: "", descuentoManual: 0, codigoDescuentoId: "", clienteId: "", chequeNumero: "", chequeBanco: "", chequeVto: "" }));
       setVerObs(false);
       setJustSaved(true);
       setTimeout(() => setJustSaved(false), 2500);
@@ -1338,6 +1521,19 @@ function VentasView({ data, update, esAsesora }) {
                 {data.medios.map((m) => <option key={m} value={m}>{m}</option>)}
               </Select>
             </Field>
+            {esCheque && (
+              <>
+                <Field label="N° de cheque">
+                  <TextInput value={orden.chequeNumero} onChange={(e) => setOrden({ ...orden, chequeNumero: e.target.value })} style={{ width: 120 }} />
+                </Field>
+                <Field label="Banco">
+                  <TextInput value={orden.chequeBanco} onChange={(e) => setOrden({ ...orden, chequeBanco: e.target.value })} style={{ width: 140 }} />
+                </Field>
+                <Field label="Fecha de vencimiento">
+                  <TextInput type="date" value={orden.chequeVto} onChange={(e) => setOrden({ ...orden, chequeVto: e.target.value })} required />
+                </Field>
+              </>
+            )}
             {esCtaCte && (
               <Field label="Cliente">
                 <Select value={orden.clienteId} onChange={(e) => setOrden({ ...orden, clienteId: e.target.value })} required style={{ minWidth: 150 }}>
@@ -1425,7 +1621,10 @@ function VentasView({ data, update, esAsesora }) {
                   <TblCell data-label="Desc." style={{ padding: "8px 12px", color: C.rust }}>{v.descuentoMonto ? `-${money(v.descuentoMonto)}` : "—"}</TblCell>
                   <TblCell data-label="Total" style={{ padding: "8px 12px", fontWeight: 600 }}>{money(v.total)}</TblCell>
                   <TblCell data-label="Punto de venta" style={{ padding: "8px 12px" }}>{v.puntoVenta}</TblCell>
-                  <TblCell data-label="Medio" style={{ padding: "8px 12px" }}>{v.medioPago}</TblCell>
+                  <TblCell data-label="Medio" style={{ padding: "8px 12px" }}>
+                  {v.medioPago}
+                  {v.fechaVtoCheque && <div style={{ fontSize: 11, color: C.inkFaint }}>{textoCheque(v)}</div>}
+                </TblCell>
                   <TblCell data-label="Cobro" style={{ padding: "8px 12px" }}>
                     {v.medioPago === MEDIO_CTA_CTE ? (
                       <span style={{ color: C.inkFaint }}>Cta. Cte.</span>
@@ -1470,7 +1669,8 @@ function VentasView({ data, update, esAsesora }) {
 
 /* ---------- Gastos ---------- */
 function GastosView({ data, update, esAsesora }) {
-  const [form, setForm] = useState({ fecha: todayStr(), rubro: data.rubros[0] || "", monto: "", detalle: "", medioPago: data.medios[0] || "", observaciones: "" });
+  const [form, setForm] = useState({ fecha: todayStr(), rubro: data.rubros[0] || "", monto: "", detalle: "", medioPago: data.medios[0] || "", observaciones: "", chequeNumero: "", chequeBanco: "", fechaVtoCheque: "" });
+  const esChequeG = medioFechaPropia(data, form.medioPago);
   const [verObs, setVerObs] = useState(false);
   const [verHistorico, setVerHistorico] = useState(false);
   const [localError, setLocalError] = useState("");
@@ -1483,9 +1683,11 @@ function GastosView({ data, update, esAsesora }) {
     try {
       const monto = Number(form.monto) || 0;
       if (!monto) { setLocalError("Falta indicar un monto mayor a cero."); return; }
+      if (esChequeG && !form.fechaVtoCheque) { setLocalError("Indicá la fecha de vencimiento del cheque."); return; }
       const gasto = { id: uid(), ...form, monto };
+      if (!esChequeG) { delete gasto.chequeNumero; delete gasto.chequeBanco; delete gasto.fechaVtoCheque; }
       update({ ...data, gastos: [gasto, ...data.gastos] });
-      setForm({ fecha: todayStr(), rubro: data.rubros[0] || "", monto: "", detalle: "", medioPago: data.medios[0] || "", observaciones: "" });
+      setForm({ fecha: todayStr(), rubro: data.rubros[0] || "", monto: "", detalle: "", medioPago: data.medios[0] || "", observaciones: "", chequeNumero: "", chequeBanco: "", fechaVtoCheque: "" });
       setVerObs(false);
       setJustSaved(true);
       setTimeout(() => setJustSaved(false), 2500);
@@ -1526,6 +1728,19 @@ function GastosView({ data, update, esAsesora }) {
               {data.medios.map((m) => <option key={m} value={m}>{m}</option>)}
             </Select>
           </Field>
+          {esChequeG && (
+            <>
+              <Field label="N° de cheque">
+                <TextInput value={form.chequeNumero} onChange={(e) => setForm({ ...form, chequeNumero: e.target.value })} style={{ width: 120 }} />
+              </Field>
+              <Field label="Banco">
+                <TextInput value={form.chequeBanco} onChange={(e) => setForm({ ...form, chequeBanco: e.target.value })} style={{ width: 140 }} />
+              </Field>
+              <Field label="Fecha de vencimiento">
+                <TextInput type="date" value={form.fechaVtoCheque} onChange={(e) => setForm({ ...form, fechaVtoCheque: e.target.value })} />
+              </Field>
+            </>
+          )}
           <Button variant="ghost" type="button" onClick={() => setVerObs(!verObs)}>
             <MessageSquarePlus size={15} /> Observaciones
           </Button>
@@ -1567,7 +1782,14 @@ function GastosView({ data, update, esAsesora }) {
                   <TblCell data-label="Rubro" style={{ padding: "8px 12px" }}>{g.rubro}</TblCell>
                   <TblCell data-label="Detalle" style={{ padding: "8px 12px", color: C.inkSoft }}>{g.detalle}</TblCell>
                   <TblCell data-label="Monto" style={{ padding: "8px 12px", fontWeight: 600 }}>{money(g.monto)}</TblCell>
-                  <TblCell data-label="Medio" style={{ padding: "8px 12px" }}>{g.medioPago}</TblCell>
+                  <TblCell data-label="Medio" style={{ padding: "8px 12px" }}>
+                  {g.medioPago}
+                  {g.fechaVtoCheque && (
+                    <div style={{ fontSize: 11, color: gastoDebitado(g) ? C.inkFaint : C.gold }}>
+                      {textoCheque(g)} · {gastoDebitado(g) ? "debitado" : "a pagar"}
+                    </div>
+                  )}
+                </TblCell>
                   <TblCell data-label="Obs." style={{ padding: "8px 12px", color: C.inkSoft }}>{g.observaciones}</TblCell>
                   <TblCell data-label="" style={{ padding: "8px 12px" }}>
                     <Trash2
@@ -3612,7 +3834,7 @@ function ClientesView({ data, update }) {
 /* ---------- Cobros Pendientes ---------- */
 function CobrosPendientes({ data, update }) {
   const mediosConDemora = Object.entries(data.medioConfig || {})
-    .filter(([medio, cfg]) => medio !== MEDIO_CTA_CTE && Number(cfg.diasAcreditacion) > 0)
+    .filter(([medio, cfg]) => medio !== MEDIO_CTA_CTE && (Number(cfg.diasAcreditacion) > 0 || cfg.fechaPropia))
     .map(([medio]) => medio)
     .filter((medio) => data.medios.includes(medio));
 
@@ -3627,8 +3849,14 @@ function CobrosPendientes({ data, update }) {
   const seleccionadas = pendientes.filter((v) => seleccion[v.id]);
   const sumaSeleccionada = seleccionadas.reduce((a, v) => a + v.total, 0);
 
+  const esMedioCheque = medioFechaPropia(data, medioSel);
   function toggle(id) {
-    setSeleccion({ ...seleccion, [id]: !seleccion[id] });
+    const nueva = { ...seleccion, [id]: !seleccion[id] };
+    setSeleccion(nueva);
+    // un cheque se cobra por su valor: se sugiere el total marcado como monto acreditado
+    if (esMedioCheque) {
+      setMontoReal(pendientes.filter((v) => nueva[v.id]).reduce((a, v) => a + v.total, 0));
+    }
   }
 
   function confirmar() {
@@ -3658,7 +3886,7 @@ function CobrosPendientes({ data, update }) {
         loteId,
       };
     });
-    const gasto = {
+    const gasto = comisionReal === 0 ? null : {
       id: uid(),
       fecha: fechaReal,
       rubro: "Comisiones Corredores de Pago",
@@ -3667,7 +3895,7 @@ function CobrosPendientes({ data, update }) {
       medioPago: medioSel,
       observaciones: "",
     };
-    update({ ...data, ventas, gastos: [gasto, ...data.gastos] });
+    update({ ...data, ventas, gastos: gasto ? [gasto, ...data.gastos] : data.gastos });
     setSeleccion({});
     setMontoReal("");
     setJustSaved(true);
@@ -3679,7 +3907,7 @@ function CobrosPendientes({ data, update }) {
       <Card style={{ padding: 18 }}>
         <div style={{ fontWeight: 600, marginBottom: 6 }}>Cobros pendientes</div>
         <div style={{ fontSize: 13, color: C.inkFaint }}>
-          Todavía no configuraste ningún medio de pago con días de acreditación en Configuración, así que no hay nada que revisar acá.
+          Todavía no configuraste ningún medio de pago con días de acreditación (o con fecha propia, como el cheque) en Configuración, así que no hay nada que revisar acá.
         </div>
       </Card>
     );
@@ -3703,12 +3931,13 @@ function CobrosPendientes({ data, update }) {
         <div style={{ fontSize: 13, color: C.inkFaint }}>No hay ventas pendientes de cobro para este medio.</div>
       ) : (
         <>
-          <Tbl columns={5} style={{ fontSize: 13, marginBottom: 12 }}>
+          <Tbl columns={6} style={{ fontSize: 13, marginBottom: 12 }}>
               <TblHeadRow style={{ color: C.inkSoft, textAlign: "left" }}>
                 <TblTh style={{ padding: "6px 8px" }}></TblTh>
                 <TblTh style={{ padding: "6px 8px" }}>Fecha</TblTh>
                 <TblTh style={{ padding: "6px 8px" }}>Producto</TblTh>
-                <TblTh style={{ padding: "6px 8px" }}>Fecha estimada</TblTh>
+                <TblTh style={{ padding: "6px 8px" }}>Cheque</TblTh>
+                <TblTh style={{ padding: "6px 8px" }}>Fecha estimada / vto</TblTh>
                 <TblTh style={{ padding: "6px 8px", textAlign: "right" }}>Monto vendido</TblTh>
               </TblHeadRow>
               {pendientes.map((v) => (
@@ -3718,6 +3947,7 @@ function CobrosPendientes({ data, update }) {
                   </TblCell>
                   <TblCell data-label="Fecha" style={{ padding: "6px 8px" }}>{v.fecha}</TblCell>
                   <TblCell data-label="Producto" style={{ padding: "6px 8px" }}>{v.productoNombre}</TblCell>
+                  <TblCell data-label="Cheque" style={{ padding: "6px 8px", color: C.inkSoft }}>{v.fechaVtoCheque ? [v.chequeNumero && `N° ${v.chequeNumero}`, v.chequeBanco].filter(Boolean).join(" · ") || "—" : "—"}</TblCell>
                   <TblCell data-label="Fecha estimada" style={{ padding: "6px 8px", color: C.inkSoft }}>{v.fechaEstimadaAcreditacion}</TblCell>
                   <TblCell data-label="Monto vendido" style={{ padding: "6px 8px", textAlign: "right" }}>{money(v.total)}</TblCell>
                 </TblRow>
@@ -4119,7 +4349,7 @@ function ConfigView({ data, update, esAsesora }) {
       <Card style={{ padding: 18 }}>
         <div style={{ fontWeight: 600, marginBottom: 4 }}>Reglas de acreditación por medio de pago</div>
         <div style={{ fontSize: 12, color: C.inkSoft, marginBottom: 12 }}>
-          Para medios con cobro diferido (tarjetas, pasarelas de pago), indicá cuántos días tarda en acreditarse y qué comisión estimada cobra. Dejalo en 0 para medios que se cobran al instante (Efectivo, Transferencia).
+          Para medios con cobro diferido (tarjetas, pasarelas de pago), indicá cuántos días tarda en acreditarse y qué comisión estimada cobra. Dejalo en 0 para medios que se cobran al instante (Efectivo, Transferencia). Para cheques, tildá "Fecha propia": no lleva días fijos, cada venta o gasto pide número, banco y vencimiento.
         </div>
         <div className="flex flex-col gap-2">
           {view.medios.filter((m) => m !== MEDIO_CTA_CTE).map((m) => {
@@ -4135,6 +4365,15 @@ function ConfigView({ data, update, esAsesora }) {
                 <Field label="Comisión % estimada">
                   <TextInput type="number" value={cfg.comisionPct} onChange={(e) => setCfg("comisionPct", Number(e.target.value))} style={{ width: 90 }} disabled={!editando} />
                 </Field>
+                <label className="flex items-center gap-2" style={{ fontSize: 13, paddingBottom: 8 }}>
+                  <input type="checkbox" checked={!!cfg.fechaPropia} onChange={(e) => setCfg("fechaPropia", e.target.checked)} disabled={!editando} />
+                  Fecha propia (cheque)
+                </label>
+                {cfg.fechaPropia && (
+                  <div style={{ fontSize: 11.5, color: C.inkFaint, maxWidth: 340 }}>
+                    Cada venta o gasto con este medio pide número de cheque, banco y fecha de vencimiento, y se cobra o paga en esa fecha (los días fijos no se usan).
+                  </div>
+                )}
                 {Number(cfg.diasAcreditacion) > 0 && (
                   <div style={{ fontSize: 11.5, color: C.inkFaint, maxWidth: 340 }}>
                     Los cobros se acreditan automáticamente al flujo de caja en la fecha que indiques acá. Podés revisarlos y ajustarlos en Arqueo de Caja → Cobros pendientes.
