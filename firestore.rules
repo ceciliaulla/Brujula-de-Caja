@@ -15,6 +15,13 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Ajustes generales (por ejemplo, el link del instructivo para todos los clientes):
+    // cualquier usuario con sesión puede leerlos; solo la asesora puede modificarlos.
+    match /ajustes/{docId} {
+      allow read: if request.auth != null;
+      allow write: if esAsesora();
+    }
+
     // Cada cliente entra solo a su propia carpeta (negocios/{su propio uid}) y a todo lo de adentro.
     // La asesora entra a la de cualquier cliente.
     match /negocios/{clienteId} {

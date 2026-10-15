@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 import { auth, db } from "./firebase";
 import { cargarNegocio, guardarCambios, listarNegocios } from "./firestoreSync";
 import { Negocio, ErrorBoundary } from "./GestionNegocio";
@@ -73,7 +73,7 @@ function SelectorCliente({ negocios, onElegir, onCerrarSesion }) {
   );
 }
 
-function CargandoNegocio({ clienteId, esAsesora, onCambiarCliente, onCerrarSesion }) {
+function CargandoNegocio({ clienteId, esAsesora, onCambiarCliente, onCerrarSesion, instructivoGlobal, onGuardarInstructivoGlobal }) {
   const [data, setData] = useState(null);
   const dataRef = useRef(null);
 
@@ -122,7 +122,16 @@ function CargandoNegocio({ clienteId, esAsesora, onCambiarCliente, onCerrarSesio
     </div>
   );
 
-  return <Negocio data={data} update={update} cabecera={cabecera} esAsesora={esAsesora} />;
+  return (
+    <Negocio
+      data={data}
+      update={update}
+      cabecera={cabecera}
+      esAsesora={esAsesora}
+      instructivoGlobal={instructivoGlobal}
+      onGuardarInstructivoGlobal={onGuardarInstructivoGlobal}
+    />
+  );
 }
 
 export default function AppRoot() {
@@ -130,6 +139,19 @@ export default function AppRoot() {
   const [esAsesora, setEsAsesora] = useState(false);
   const [negocios, setNegocios] = useState(null);
   const [clienteId, setClienteId] = useState(null);
+  const [instructivoGlobal, setInstructivoGlobal] = useState("");
+
+  // Instructivo general (ajustes/global): lo leen todos los usuarios; solo la asesora lo escribe.
+  useEffect(() => {
+    if (!usuario) { setInstructivoGlobal(""); return; }
+    getDoc(doc(db, "ajustes", "global"))
+      .then((s) => setInstructivoGlobal(s.exists() ? s.data().linkInstructivo || "" : ""))
+      .catch(() => {}); // si todavía no se publicaron las reglas nuevas, simplemente no hay link general
+  }, [usuario]);
+  async function guardarInstructivoGlobal(link) {
+    await setDoc(doc(db, "ajustes", "global"), { linkInstructivo: link }, { merge: true });
+    setInstructivoGlobal(link);
+  }
 
   useEffect(() => {
     return onAuthStateChanged(auth, async (u) => {
@@ -167,6 +189,8 @@ export default function AppRoot() {
         esAsesora={esAsesora}
         onCambiarCliente={() => setClienteId(null)}
         onCerrarSesion={() => signOut(auth)}
+        instructivoGlobal={instructivoGlobal}
+        onGuardarInstructivoGlobal={guardarInstructivoGlobal}
       />
     </ErrorBoundary>
   );

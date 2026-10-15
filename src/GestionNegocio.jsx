@@ -44,6 +44,11 @@ const LOGO_CECILIA_B64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAeAAAAEC
 
 
 const MEDIO_CTA_CTE = "Cuenta Corriente";
+// Medios de cheque: vienen configurados de fábrica y no usan días fijos de acreditación;
+// cada venta o gasto trae el vencimiento de su propio cheque.
+const MEDIO_CHEQUE_TERCEROS = "Cheque de terceros";
+const MEDIO_CHEQUE_PROPIO = "Cheque propio";
+const MEDIOS_CHEQUE = [MEDIO_CHEQUE_TERCEROS, MEDIO_CHEQUE_PROPIO];
 // Medios de canal para ventas online, precargados en Configuración con una estimación de días
 // de acreditación de referencia (ajustable por cada negocio según su pasarela real).
 const MEDIO_CONFIG_ECOMMERCE_DEFAULT = {
@@ -155,11 +160,18 @@ function estaAcreditadaVenta(v) {
 // Un medio con fechaPropia (ej. "Cheque") no usa días fijos de acreditación: cada venta o gasto
 // trae su propio vencimiento (número de cheque, banco y fecha de vto).
 function medioFechaPropia(data, medio) {
-  return !!((data.medioConfig || {})[medio] || {}).fechaPropia;
+  return MEDIOS_CHEQUE.includes(medio) || !!((data.medioConfig || {})[medio] || {}).fechaPropia;
 }
 // Un gasto pagado con cheque propio recién sale de la caja al llegar el vencimiento.
 function gastoDebitado(g) {
   return !g.fechaVtoCheque || g.fechaVtoCheque <= todayStr();
+}
+// Si un link se pegó sin "https://" (ej. "youtu.be/abc"), el navegador lo tomaría como una ruta de la
+// propia app y no abriría la página. Acá se le agrega el prefijo cuando falta.
+function urlExterna(link) {
+  const l = (link || "").trim();
+  if (!l) return "";
+  return /^[a-z][a-z0-9+.-]*:/i.test(l) ? l : `https://${l}`;
 }
 function textoCheque(x) {
   if (!x.fechaVtoCheque) return "";
@@ -244,7 +256,7 @@ function defaultData() {
     puntosVenta: ["A", "B", "C"],
     rubros: [...RUBROS_DEFAULT],
     rubroTipo: { ...RUBRO_TIPO_DEFAULT },
-    medios: ["Efectivo", "Mercado Pago", "Banco XX", "NX", ...MEDIOS_ECOMMERCE_DEFAULT, MEDIO_CTA_CTE],
+    medios: ["Efectivo", "Mercado Pago", "Banco XX", "NX", ...MEDIOS_CHEQUE, ...MEDIOS_ECOMMERCE_DEFAULT, MEDIO_CTA_CTE],
     medioConfig: { ...MEDIO_CONFIG_ECOMMERCE_DEFAULT },
     listaLabels: { ...LISTA_LABEL_DEFAULT },
     cantidadListas: 3,
@@ -285,6 +297,13 @@ export function normalizarData(parcial) {
       });
     }
     merged._migroCanalesEcommerce = true;
+  }
+  // Negocios que ya existían antes de los cheques: se les agregan los dos medios de cheque (una sola vez;
+  // si después los borran porque no los usan, no vuelven a aparecer: la marca se guarda en Firestore).
+  if (!merged._migroCheques) {
+    const faltan = MEDIOS_CHEQUE.filter((m) => !merged.medios.includes(m));
+    if (faltan.length) merged.medios = [...merged.medios, ...faltan];
+    merged._migroCheques = true;
   }
   return merged;
 }
@@ -3833,10 +3852,11 @@ function ClientesView({ data, update }) {
 /* ---------- Arqueo de Caja ---------- */
 /* ---------- Cobros Pendientes ---------- */
 function CobrosPendientes({ data, update }) {
-  const mediosConDemora = Object.entries(data.medioConfig || {})
-    .filter(([medio, cfg]) => medio !== MEDIO_CTA_CTE && (Number(cfg.diasAcreditacion) > 0 || cfg.fechaPropia))
-    .map(([medio]) => medio)
-    .filter((medio) => data.medios.includes(medio));
+  const mediosConDemora = data.medios.filter(
+    (medio) =>
+      medio !== MEDIO_CTA_CTE &&
+      (Number(((data.medioConfig || {})[medio] || {}).diasAcreditacion) > 0 || medioFechaPropia(data, medio))
+  );
 
   const [medioSel, setMedioSel] = useState(mediosConDemora[0] || "");
   const [seleccion, setSeleccion] = useState({});
@@ -4078,7 +4098,7 @@ function ArqueoView({ data, update }) {
 }
 
 /* ---------- Configuración ---------- */
-function ConfigView({ data, update, esAsesora }) {
+function ConfigView({ data, update, esAsesora, linkInstructivo, instructivoGlobal, onGuardarInstructivoGlobal }) {
   const [editando, setEditando] = useState(false);
   const [draft, setDraft] = useState(data);
 
@@ -4225,6 +4245,18 @@ function ConfigView({ data, update, esAsesora }) {
       )}
 
       <Card style={{ padding: 18 }}>
+        <div style={{ fontWeight: 600, marginBottom: 8 }}>Instructivo</div>
+        {linkInstructivo ? (
+          <a href={linkInstructivo} target="_blank" rel="noreferrer" style={{ color: C.green, fontWeight: 600, fontSize: 14 }}>
+            Abrir el instructivo (video o página) →
+          </a>
+        ) : (
+          <div style={{ fontSize: 13, color: C.inkFaint }}>Todavía no hay un instructivo cargado.</div>
+        )}
+        {esAsesora && <InstructivoGeneralEditor valor={instructivoGlobal || ""} onGuardar={onGuardarInstructivoGlobal} />}
+      </Card>
+
+      <Card style={{ padding: 18 }}>
         <div style={{ fontWeight: 600, marginBottom: 10 }}>Datos del negocio</div>
         <div className="flex flex-wrap gap-3 items-end">
           <Field label="Nombre del negocio">
@@ -4236,15 +4268,17 @@ function ConfigView({ data, update, esAsesora }) {
               disabled={!editando}
             />
           </Field>
-          <Field label="Link del instructivo (video o página)">
-            <TextInput
-              value={view.linkInstructivo || ""}
-              onChange={(e) => localUpdate({ ...view, linkInstructivo: e.target.value })}
-              placeholder="https://..."
-              style={{ width: 300 }}
-              disabled={!editando}
-            />
-          </Field>
+          {esAsesora && (
+            <Field label="Link propio de este negocio (opcional: si está vacío se usa el instructivo general)">
+              <TextInput
+                value={view.linkInstructivo || ""}
+                onChange={(e) => localUpdate({ ...view, linkInstructivo: e.target.value })}
+                placeholder="https://..."
+                style={{ width: 300 }}
+                disabled={!editando}
+              />
+            </Field>
+          )}
         </div>
         <div style={{ fontSize: 12, color: C.inkSoft, marginTop: 8 }}>
           El nombre del negocio se usa para nombrar los reportes que descargás, y más adelante para organizar los archivos en Drive.
@@ -4349,7 +4383,7 @@ function ConfigView({ data, update, esAsesora }) {
       <Card style={{ padding: 18 }}>
         <div style={{ fontWeight: 600, marginBottom: 4 }}>Reglas de acreditación por medio de pago</div>
         <div style={{ fontSize: 12, color: C.inkSoft, marginBottom: 12 }}>
-          Para medios con cobro diferido (tarjetas, pasarelas de pago), indicá cuántos días tarda en acreditarse y qué comisión estimada cobra. Dejalo en 0 para medios que se cobran al instante (Efectivo, Transferencia). Para cheques, tildá "Fecha propia": no lleva días fijos, cada venta o gasto pide número, banco y vencimiento.
+          Para medios con cobro diferido (tarjetas, pasarelas de pago), indicá cuántos días tarda en acreditarse y qué comisión estimada cobra. Dejalo en 0 para medios que se cobran al instante (Efectivo, Transferencia). Los medios de cheque no llevan días ni comisión: cada venta o gasto pide número, banco y vencimiento. Si el negocio no usa cheques, podés eliminarlos de la lista de medios de pago.
         </div>
         <div className="flex flex-col gap-2">
           {view.medios.filter((m) => m !== MEDIO_CTA_CTE).map((m) => {
@@ -4359,31 +4393,64 @@ function ConfigView({ data, update, esAsesora }) {
             return (
               <div key={m} className="flex flex-wrap items-end gap-3" style={{ borderTop: `1px solid ${C.line}`, paddingTop: 10 }}>
                 <div style={{ minWidth: 130, fontWeight: 500, fontSize: 13.5 }}>{m}</div>
-                <Field label="Días hasta acreditación">
-                  <TextInput type="number" value={cfg.diasAcreditacion} onChange={(e) => setCfg("diasAcreditacion", Number(e.target.value))} style={{ width: 90 }} disabled={!editando} />
-                </Field>
-                <Field label="Comisión % estimada">
-                  <TextInput type="number" value={cfg.comisionPct} onChange={(e) => setCfg("comisionPct", Number(e.target.value))} style={{ width: 90 }} disabled={!editando} />
-                </Field>
-                <label className="flex items-center gap-2" style={{ fontSize: 13, paddingBottom: 8 }}>
-                  <input type="checkbox" checked={!!cfg.fechaPropia} onChange={(e) => setCfg("fechaPropia", e.target.checked)} disabled={!editando} />
-                  Fecha propia (cheque)
-                </label>
-                {cfg.fechaPropia && (
-                  <div style={{ fontSize: 11.5, color: C.inkFaint, maxWidth: 340 }}>
-                    Cada venta o gasto con este medio pide número de cheque, banco y fecha de vencimiento, y se cobra o paga en esa fecha (los días fijos no se usan).
+                {MEDIOS_CHEQUE.includes(m) ? (
+                  <div style={{ fontSize: 12, color: C.inkFaint, maxWidth: 440 }}>
+                    {m === MEDIO_CHEQUE_PROPIO
+                      ? "Cheques que emite el negocio. En cada gasto se pide número, banco y fecha de vencimiento, y el dinero se considera salido en esa fecha."
+                      : "Cheques que entregan los clientes. En cada venta se pide número, banco y fecha de vencimiento, y se cobra en esa fecha."}
                   </div>
-                )}
-                {Number(cfg.diasAcreditacion) > 0 && (
-                  <div style={{ fontSize: 11.5, color: C.inkFaint, maxWidth: 340 }}>
-                    Los cobros se acreditan automáticamente al flujo de caja en la fecha que indiques acá. Podés revisarlos y ajustarlos en Arqueo de Caja → Cobros pendientes.
-                  </div>
+                ) : (
+                  <>
+                    <Field label="Días hasta acreditación">
+                      <TextInput type="number" value={cfg.diasAcreditacion} onChange={(e) => setCfg("diasAcreditacion", Number(e.target.value))} style={{ width: 90 }} disabled={!editando} />
+                    </Field>
+                    <Field label="Comisión % estimada">
+                      <TextInput type="number" value={cfg.comisionPct} onChange={(e) => setCfg("comisionPct", Number(e.target.value))} style={{ width: 90 }} disabled={!editando} />
+                    </Field>
+                    {Number(cfg.diasAcreditacion) > 0 && (
+                      <div style={{ fontSize: 11.5, color: C.inkFaint, maxWidth: 340 }}>
+                        Los cobros se acreditan automáticamente al flujo de caja en la fecha que indiques acá. Podés revisarlos y ajustarlos en Arqueo de Caja → Cobros pendientes.
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             );
           })}
         </div>
       </Card>
+    </div>
+  );
+}
+// Instructivo general: lo ven todos los clientes. Se guarda aparte (no por negocio) y al instante.
+function InstructivoGeneralEditor({ valor, onGuardar }) {
+  const [texto, setTexto] = useState(valor);
+  const [estado, setEstado] = useState(""); // "", "guardando", "ok", "error"
+  useEffect(() => { setTexto(valor); }, [valor]);
+  async function guardar() {
+    if (!onGuardar) return;
+    setEstado("guardando");
+    try {
+      await onGuardar(texto.trim());
+      setEstado("ok");
+      setTimeout(() => setEstado(""), 2500);
+    } catch (e) {
+      console.error(e);
+      setEstado("error");
+    }
+  }
+  return (
+    <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${C.line}` }}>
+      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 2 }}>Instructivo general (para todos los clientes)</div>
+      <div style={{ fontSize: 12, color: C.inkSoft, marginBottom: 8 }}>
+        Este link lo ven todos los clientes, en Configuración y en el botón de ayuda (?). Si un negocio tiene su propio link, ese tiene prioridad.
+      </div>
+      <div className="flex flex-wrap gap-2 items-center">
+        <TextInput value={texto} onChange={(e) => setTexto(e.target.value)} placeholder="https://..." style={{ width: 320 }} />
+        <Button onClick={guardar} disabled={estado === "guardando" || texto.trim() === valor}>Guardar para todos</Button>
+        {estado === "ok" && <span style={{ fontSize: 13, color: C.green, fontWeight: 600 }}>✓ Guardado</span>}
+        {estado === "error" && <span style={{ fontSize: 13, color: C.rust }}>No se pudo guardar. Revisá que hayas publicado las reglas nuevas de Firestore.</span>}
+      </div>
     </div>
   );
 }
@@ -4479,7 +4546,7 @@ function CodigosDescuento({ data, update, editable = true }) {
 }
 
 /* ---------- Ayuda ---------- */
-function AyudaBoton({ data }) {
+function AyudaBoton({ linkInstructivo }) {
   const [abierto, setAbierto] = useState(false);
   return (
     <>
@@ -4505,19 +4572,19 @@ function AyudaBoton({ data }) {
               <X size={18} style={{ cursor: "pointer" }} onClick={() => setAbierto(false)} />
             </div>
             <ul style={{ fontSize: 13.5, lineHeight: 1.9, color: C.ink, paddingLeft: 18 }}>
-              <li>Cargá tus productos primero, con sus 3 precios y el stock inicial.</li>
+              <li>Cargá tus productos primero, con sus precios y el stock inicial.</li>
               <li>Registrá cada venta y gasto a medida que ocurren.</li>
               <li>Lo que no es venta ni gasto (aportes, préstamos, ajustes) va en Movimientos de Caja.</li>
               <li>Hacé tu Arqueo de Caja periódicamente para controlar el saldo real.</li>
               <li>Mirá Indicadores para ver cómo va el negocio, mes a mes.</li>
             </ul>
-            {data.linkInstructivo ? (
-              <a href={data.linkInstructivo} target="_blank" rel="noreferrer" style={{ display: "inline-block", marginTop: 10, color: C.green, fontWeight: 600, fontSize: 13.5 }}>
+            {linkInstructivo ? (
+              <a href={linkInstructivo} target="_blank" rel="noreferrer" style={{ display: "inline-block", marginTop: 10, color: C.green, fontWeight: 600, fontSize: 13.5 }}>
                 Ver instructivo completo →
               </a>
             ) : (
               <div style={{ marginTop: 10, fontSize: 12.5, color: C.inkFaint }}>
-                (Todavía no se cargó un link de instructivo en Configuración.)
+                (Todavía no hay un instructivo cargado.)
               </div>
             )}
           </div>
@@ -4619,7 +4686,9 @@ function ErrorBanner() {
 // Antes esto se llamaba InnerApp y cargaba sus propios datos desde window.storage.
 // Ahora recibe `data` ya cargado y `update` ya conectado a Firestore desde AppRoot.jsx —
 // ninguna de las pantallas de adentro (VentasView, GastosView, etc.) tuvo que cambiar.
-export function Negocio({ data, update, cabecera, esAsesora }) {
+export function Negocio({ data, update, cabecera, esAsesora, instructivoGlobal = "", onGuardarInstructivoGlobal }) {
+  // el link propio del negocio (si lo tiene) tiene prioridad sobre el instructivo general
+  const linkInstructivo = urlExterna(data.linkInstructivo || instructivoGlobal);
   const [tab, setTab] = useState("dashboard");
   const [menuAbierto, setMenuAbierto] = useState(false);
 
@@ -4643,7 +4712,7 @@ export function Negocio({ data, update, cabecera, esAsesora }) {
     arqueo: <ArqueoView data={data} update={update} />,
     productos: <ProductosView data={data} update={update} />,
     importar: <ImportarView data={data} update={update} />,
-    config: <ConfigView data={data} update={update} esAsesora={esAsesora} />,
+    config: <ConfigView data={data} update={update} esAsesora={esAsesora} linkInstructivo={linkInstructivo} instructivoGlobal={instructivoGlobal} onGuardarInstructivoGlobal={onGuardarInstructivoGlobal} />,
   };
 
   return (
@@ -4664,7 +4733,7 @@ export function Negocio({ data, update, cabecera, esAsesora }) {
         {cabecera}
         {views[tab]}
       </div>
-      <AyudaBoton data={data} />
+      <AyudaBoton linkInstructivo={linkInstructivo} />
       <MarcaAgua />
     </div>
   );

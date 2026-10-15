@@ -14,6 +14,20 @@ export async function cargarNegocio(clienteId) {
   const parcial = configSnap.exists() ? configSnap.data() : {};
   const data = normalizarData(parcial);
 
+  // Si el negocio es anterior a los medios de cheque, se guarda ahora la migración (una sola vez):
+  // así, si después se elimina un medio que no se usa, no vuelve a aparecer al recargar.
+  if (configSnap.exists() && !parcial._migroCheques) {
+    try {
+      await setDoc(
+        doc(db, "negocios", clienteId),
+        { medios: data.medios, medioConfig: data.medioConfig, _migroCheques: true, _migroCanalesEcommerce: true },
+        { merge: true }
+      );
+    } catch (e) {
+      console.warn("No se pudo guardar la migración de medios de pago", e);
+    }
+  }
+
   for (const sub of SUBCOLECCIONES_NEGOCIO) {
     const snap = await getDocs(collection(db, "negocios", clienteId, sub));
     data[sub] = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
